@@ -20,7 +20,6 @@ using System.Net.Http;
 #endif
 using System.Reflection;
 using System.Text.Json;
-using Moq;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Tests;
 using OpenTelemetry.Trace;
@@ -51,7 +50,6 @@ public partial class HttpClientTests
             out var host,
             out var port);
 
-        var processor = new Mock<BaseProcessor<Activity>>();
         tc.Url = HttpTestData.NormalizeValues(tc.Url, host, port);
 
         var metrics = new List<Metric>();
@@ -60,6 +58,8 @@ public partial class HttpClientTests
             .AddHttpClientInstrumentation()
             .AddInMemoryExporter(metrics)
             .Build();
+
+        var spans = new List<Activity>();
 
         using (Sdk.CreateTracerProviderBuilder()
             .AddHttpClientInstrumentation((opt) =>
@@ -71,7 +71,7 @@ public partial class HttpClientTests
                 opt.EnrichWithException = (activity, exception) => { enrichWithExceptionCalled = true; };
                 opt.RecordException = tc.RecordException ?? false;
             })
-            .AddProcessor(processor.Object)
+            .AddInMemoryExporter(spans)
             .Build())
         {
             try
@@ -110,8 +110,8 @@ public partial class HttpClientTests
             .Where(metric => metric.Name == "http.client.duration")
             .ToArray();
 
-        Assert.Equal(5, processor.Invocations.Count); // SetParentProvider/OnStart/OnEnd/OnShutdown/Dispose called.
-        var activity = (Activity)processor.Invocations[2].Arguments[0];
+        Assert.Single(spans);
+        var activity = spans[0];
 
         Assert.Equal(ActivityKind.Client, activity.Kind);
         Assert.Equal(tc.SpanName, activity.DisplayName);
@@ -214,6 +214,136 @@ public partial class HttpClientTests
         }
     }
 
+    [Theory]
+    [MemberData(nameof(TestData))]
+    public async Task HttpOutCallsAreCollectedSuccessfullyAsync_OnlyMetrics(HttpTestData.HttpOutTestCase tc)
+    {
+        using var serverLifeTime = TestHttpServer.RunServer(
+            (ctx) =>
+            {
+                ctx.Response.StatusCode = tc.ResponseCode == 0 ? 200 : tc.ResponseCode;
+                ctx.Response.OutputStream.Close();
+            },
+            out var host,
+            out var port);
+
+        tc.Url = HttpTestData.NormalizeValues(tc.Url, host, port);
+
+        var metrics = new List<Metric>();
+
+        var meterProvider = Sdk.CreateMeterProviderBuilder()
+            .AddHttpClientInstrumentation()
+            .AddInMemoryExporter(metrics)
+            .Build();
+
+        var spans = new List<Activity>();
+
+        Stopwatch estimatedRequestDuration = new Stopwatch();
+
+        using (Sdk.CreateTracerProviderBuilder()
+            .AddInMemoryExporter(spans)
+            .Build())
+        {
+            try
+            {
+                using var c = new HttpClient();
+                using var request = new HttpRequestMessage
+                {
+                    RequestUri = new Uri(tc.Url),
+                    Method = new HttpMethod(tc.Method),
+#if NETFRAMEWORK
+                    Version = new Version(1, 1),
+#else
+                    Version = new Version(2, 0),
+#endif
+                };
+
+                if (tc.Headers != null)
+                {
+                    foreach (var header in tc.Headers)
+                    {
+                        request.Headers.Add(header.Key, header.Value);
+                    }
+                }
+
+                estimatedRequestDuration.Start();
+
+                await c
+                    .SendAsync(request)
+                    .ContinueWith(_ => estimatedRequestDuration.Stop())
+                    .ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // test case can intentionally send request that will result in exception
+            }
+        }
+
+        meterProvider.Dispose();
+
+        Assert.Empty(spans);
+
+        var requestMetrics = metrics
+            .Where(metric => metric.Name == "http.client.duration")
+            .ToArray();
+
+        Assert.Single(requestMetrics);
+
+        var metric = requestMetrics[0];
+        Assert.NotNull(metric);
+        Assert.True(metric.MetricType == MetricType.Histogram);
+
+        var metricPoints = new List<MetricPoint>();
+        foreach (var p in metric.GetMetricPoints())
+        {
+            metricPoints.Add(p);
+        }
+
+        Assert.Single(metricPoints);
+        var metricPoint = metricPoints[0];
+
+        var count = metricPoint.GetHistogramCount();
+        var sum = metricPoint.GetHistogramSum();
+
+        Assert.Equal(1L, count);
+
+        // Validate duration with a tolerance of 100ms.
+        Assert.Equal(estimatedRequestDuration.Elapsed.TotalMilliseconds, sum, 100.0);
+
+        var attributes = new KeyValuePair<string, object>[metricPoint.Tags.Count];
+        int i = 0;
+        foreach (var tag in metricPoint.Tags)
+        {
+            attributes[i++] = tag;
+        }
+
+        var method = new KeyValuePair<string, object>(SemanticConventions.AttributeHttpMethod, tc.Method);
+        var scheme = new KeyValuePair<string, object>(SemanticConventions.AttributeHttpScheme, "http");
+        var statusCode = new KeyValuePair<string, object>(SemanticConventions.AttributeHttpStatusCode, tc.ResponseCode == 0 ? 200 : tc.ResponseCode);
+#if NETFRAMEWORK
+        var flavor = new KeyValuePair<string, object>(SemanticConventions.AttributeHttpFlavor, "1.1");
+#else
+        var flavor = new KeyValuePair<string, object>(SemanticConventions.AttributeHttpFlavor, "2.0");
+#endif
+        var hostName = new KeyValuePair<string, object>(SemanticConventions.AttributeNetPeerName, tc.ResponseExpected ? host : "sdlfaldfjalkdfjlkajdflkajlsdjf");
+        var portNumber = new KeyValuePair<string, object>(SemanticConventions.AttributeNetPeerPort, port);
+        Assert.Contains(hostName, attributes);
+        Assert.Contains(portNumber, attributes);
+        Assert.Contains(method, attributes);
+        Assert.Contains(scheme, attributes);
+        Assert.Contains(flavor, attributes);
+        if (tc.ResponseExpected)
+        {
+            Assert.Contains(statusCode, attributes);
+            Assert.Equal(6, attributes.Length);
+        }
+        else
+        {
+            Assert.DoesNotContain(statusCode, attributes);
+            Assert.Equal(5, attributes.Length);
+        }
+    }
+
     [Fact]
     public async Task DebugIndividualTestAsync()
     {
@@ -262,7 +392,8 @@ public partial class HttpClientTests
         bool enrichWithHttpRequestMessageCalled = false;
         bool enrichWithHttpResponseMessageCalled = false;
 
-        var processor = new Mock<BaseProcessor<Activity>>();
+        var spans = new List<Activity>();
+
         using (Sdk.CreateTracerProviderBuilder()
             .SetSampler(sampler)
             .AddHttpClientInstrumentation(options =>
@@ -273,7 +404,7 @@ public partial class HttpClientTests
                 options.EnrichWithHttpRequestMessage = (activity, httpRequestMessage) => { enrichWithHttpRequestMessageCalled = true; };
                 options.EnrichWithHttpResponseMessage = (activity, httpResponseMessage) => { enrichWithHttpResponseMessageCalled = true; };
             })
-            .AddProcessor(processor.Object)
+            .AddInMemoryExporter(spans)
             .Build())
         {
             using var c = new HttpClient();
