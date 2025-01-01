@@ -305,10 +305,11 @@ public static class OtlpLogExporterHelperExtensions
          * "OtlpLogExporter");
          */
 
-        BaseExporter<LogRecord> otlpExporter = new OtlpLogExporter(
-            exporterOptions!,
-            sdkLimitOptions!,
-            experimentalOptions!);
+        BaseExporter<LogRecord> otlpExporter = exporterOptions!.Protocol switch
+        {
+            OtlpExportProtocol.ExperimentalStdout => new OtlpStdoutLogExporter(null, sdkLimitOptions!, experimentalOptions!),
+            _ => new OtlpLogExporter(exporterOptions!, sdkLimitOptions!, experimentalOptions!),
+        };
 
         if (configureExporterInstance != null)
         {
