@@ -70,7 +70,7 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
     {
         writer.WriteStartArray("scopeLogs");
 
-        writer.WriteStartObject("scopes");
+        writer.WriteStartObject("scope");
         writer.WriteEndObject(); // scopes{}
 
         writer.WriteStartArray("logRecords");
