@@ -176,7 +176,7 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
     }
 }
 
-internal static class OtlpStdoutJsonTagWriterExtensions
+internal static class OtlpJsonTagWriterExtensions
 {
     public static void TryWriteAnyValue(this Utf8JsonWriter writer, string key, object? value, int? tagValueMaxLength = null)
     {
@@ -186,7 +186,7 @@ internal static class OtlpStdoutJsonTagWriterExtensions
         }
 
         writer.WriteStartObject(key);
-        OtlpStdoutJsonTagWriter.Instance.TryWriteTag(
+        OtlpJsonTagWriter.Instance.TryWriteTag(
             ref writer,
             string.Empty,
             value,
@@ -195,11 +195,12 @@ internal static class OtlpStdoutJsonTagWriterExtensions
     }
 }
 
-internal sealed class OtlpStdoutJsonTagWriter : JsonStringArrayTagWriter<Utf8JsonWriter>
+internal sealed class OtlpJsonTagWriter : JsonStringArrayTagWriter<Utf8JsonWriter>
 {
-    public static OtlpStdoutJsonTagWriter Instance { get; } = new();
+    public static OtlpJsonTagWriter Instance { get; } = new();
 
-    protected override void OnUnsupportedTagDropped(string tagKey, string tagValueTypeFullName) => throw new NotImplementedException();
+    protected override void OnUnsupportedTagDropped(string tagKey, string tagValueTypeFullName)
+        => throw new NotImplementedException();
 
     protected override void WriteArrayTag(ref Utf8JsonWriter writer, string key, ArraySegment<byte> arrayUtf8JsonBytes)
     {

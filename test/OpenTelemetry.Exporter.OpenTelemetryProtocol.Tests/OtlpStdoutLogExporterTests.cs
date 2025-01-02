@@ -16,7 +16,7 @@ public class OtlpStdoutLogExporterTests
         var stream = new MemoryStream();
         var writer = new Utf8JsonWriter(stream);
         writer.WriteStartObject();
-        var success = OtlpStdoutJsonTagWriter.Instance.TryWriteTag(ref writer, "key", "value");
+        var success = OtlpJsonTagWriter.Instance.TryWriteTag(ref writer, "key", "value");
         writer.WriteEndObject();
         writer.Flush();
         Assert.True(success);
