@@ -29,20 +29,23 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
         this.experimentalOptions = experimentalOptions;
     }
 
-
     public override ExportResult Export(in Batch<LogRecord> batch)
     {
-        var writer = new Utf8JsonWriter(this.output!);
-        writer.WriteStartObject();
-        writer.WriteStartArray("resourceLogs");
+        using (var writer = new Utf8JsonWriter(this.output!))
+        {
+            writer.WriteStartObject();
+            writer.WriteStartArray("resourceLogs");
 
-        writer.WriteStartObject();
-        this.WriteResource(writer);
-        this.WriteScopeLogs(batch, writer);
-        writer.WriteEndObject();
+            writer.WriteStartObject();
+            this.WriteResource(writer);
+            this.WriteScopeLogs(batch, writer);
+            writer.WriteEndObject();
 
-        writer.WriteEndArray(); // resourceLogs[]
-        writer.WriteEndObject();
+            writer.WriteEndArray(); // resourceLogs[]
+            writer.WriteEndObject();
+            writer.Flush();
+        }
+
         return ExportResult.Success;
     }
 
