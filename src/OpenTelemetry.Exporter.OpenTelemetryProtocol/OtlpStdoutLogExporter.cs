@@ -106,17 +106,18 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
 
         writer.WriteNumber("severityNumber", log.Severity.HasValue ? (int)log.Severity : 0);
 
+        string body = string.Empty;
         bool bodyPopulatedFromFormattedMessage = false;
         bool isLogRecordBodySet = false;
 
         if (log.FormattedMessage != null)
         {
-            writer.TryWriteAnyValue("body", log.FormattedMessage);
+            body = log.FormattedMessage;
             bodyPopulatedFromFormattedMessage = true;
             isLogRecordBodySet = true;
         }
 
-        if (log.Attributes != null)
+        if (log.Attributes != null && log.Attributes.Count > 0)
         {
             writer.WriteStartArray("attributes");
 
@@ -127,7 +128,7 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
                 // for explanation.
                 if (attribute.Key.Equals("{OriginalFormat}") && !bodyPopulatedFromFormattedMessage)
                 {
-                    writer.TryWriteAnyValue("body", attribute.Value as string);
+                    body = attribute.Value as string;
                     isLogRecordBodySet = true;
                 }
                 else
@@ -146,9 +147,11 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
             {
                 // If {OriginalFormat} is not present in the attributes,
                 // use logRecord.Body if it is set.
-                writer.TryWriteAnyValue("body", log.Body);
+                body = log.Body;
             }
         }
+
+        writer.TryWriteAnyValue("body", body);
 
         if (log.TraceId != default && log.SpanId != default)
         {
