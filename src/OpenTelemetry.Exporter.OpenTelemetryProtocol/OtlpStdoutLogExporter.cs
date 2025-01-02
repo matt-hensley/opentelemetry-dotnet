@@ -69,6 +69,7 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
     private void WriteScopeLogs(Batch<LogRecord> batch, Utf8JsonWriter writer)
     {
         writer.WriteStartArray("scopeLogs");
+        writer.WriteStartObject();
 
         writer.WriteStartObject("scope");
         writer.WriteEndObject(); // scopes{}
