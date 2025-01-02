@@ -17,6 +17,8 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
     private Resource? resource;
     private Stream? output;
 
+    internal Resource Resource => this.resource ??= this.ParentProvider.GetResource();
+
     internal OtlpStdoutLogExporter(Stream? output, SdkLimitOptions sdkLimitOptions, ExperimentalOptions experimentalOptions)
     {
         Debug.Assert(sdkLimitOptions != null, "sdkLimitOptions was null");
@@ -27,7 +29,6 @@ internal class OtlpStdoutLogExporter : BaseExporter<LogRecord>
         this.experimentalOptions = experimentalOptions;
     }
 
-    internal Resource Resource => this.resource ??= this.ParentProvider.GetResource();
 
     public override ExportResult Export(in Batch<LogRecord> batch)
     {
