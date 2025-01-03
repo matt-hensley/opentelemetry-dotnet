@@ -36,7 +36,7 @@ namespace Benchmarks.Exporter;
 
 public class OtlpLogExporterBenchmarks
 {
-    private OtlpLogExporter? exporter;
+    private BaseExporter<LogRecord>? exporter;
     private LogRecord? logRecord;
     private CircularBuffer<LogRecord>? logRecordBatch;
 
@@ -100,6 +100,20 @@ public class OtlpLogExporterBenchmarks
         this.logRecordBatch.Add(this.logRecord);
     }
 
+    [GlobalSetup(Target = nameof(OtlpLogExporter_Stdout))]
+    public void GlobalSetupStdout()
+    {
+        var options = new OtlpExporterOptions
+        {
+            Protocol = OtlpExportProtocol.ExperimentalStdout,
+        };
+        this.exporter = new OtlpStdoutLogExporter();
+
+        this.logRecord = LogRecordHelper.CreateTestLogRecord();
+        this.logRecordBatch = new CircularBuffer<LogRecord>(1);
+        this.logRecordBatch.Add(this.logRecord);
+    }
+
     [GlobalCleanup(Target = nameof(OtlpLogExporter_Grpc))]
     public void GlobalCleanupGrpc()
     {
@@ -116,6 +130,14 @@ public class OtlpLogExporterBenchmarks
         this.server?.Dispose();
     }
 
+    [GlobalCleanup(Target = nameof(OtlpLogExporter_Stdout))]
+    public void GlobalCleanupStdout()
+    {
+        this.exporter?.Shutdown();
+        this.exporter?.Dispose();
+        this.server?.Dispose();
+    }
+
     [Benchmark]
     public void OtlpLogExporter_Http()
     {
@@ -124,6 +146,12 @@ public class OtlpLogExporterBenchmarks
 
     [Benchmark]
     public void OtlpLogExporter_Grpc()
+    {
+        this.exporter!.Export(new Batch<LogRecord>(this.logRecordBatch!, 1));
+    }
+
+    [Benchmark]
+    public void OtlpLogExporter_Stdout()
     {
         this.exporter!.Export(new Batch<LogRecord>(this.logRecordBatch!, 1));
     }
