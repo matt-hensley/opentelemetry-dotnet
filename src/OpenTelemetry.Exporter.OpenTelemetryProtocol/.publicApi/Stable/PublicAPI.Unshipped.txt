@@ -1,0 +1,1 @@
+OpenTelemetry.Exporter.OtlpExportProtocol.ExperimentalStdout = 2 -> OpenTelemetry.Exporter.OtlpExportProtocol
