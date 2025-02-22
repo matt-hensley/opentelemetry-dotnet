@@ -15,6 +15,12 @@ internal static class OtlpExportProtocolParser
             case "http/protobuf":
                 result = OtlpExportProtocol.HttpProtobuf;
                 return true;
+            case "http/json":
+                result = OtlpExportProtocol.HttpJson;
+                return true;
+            case "experimental-otlp/stdout":
+                result = OtlpExportProtocol.ExperimentalStdout;
+                return true;
             default:
                 result = default;
                 return false;

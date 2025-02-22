@@ -19,7 +19,12 @@ public enum OtlpExportProtocol : byte
     HttpProtobuf = 1,
 
     /// <summary>
+    /// OTLP over HTTP with JSON payloads (corresponds to 'http/json' Protocol configuration option).
+    /// </summary>
+    HttpJson = 2,
+
+    /// <summary>
     /// OTLP over standard out with JSON payloads (corresponds to 'experimental-otlp/stdout' Protocol configuration option).
     /// </summary>
-    ExperimentalStdout = 2,
+    ExperimentalStdout = 99,
 }
