@@ -92,7 +92,9 @@ internal static class OtlpExporterOptionsExtensions
     {
         var httpClient = options.HttpClientFactory?.Invoke() ?? throw new InvalidOperationException("OtlpExporterOptions was missing HttpClientFactory or it returned null.");
 
-        if (options.Protocol != OtlpExportProtocol.Grpc && options.Protocol != OtlpExportProtocol.HttpProtobuf)
+        if (options.Protocol != OtlpExportProtocol.Grpc
+            && options.Protocol != OtlpExportProtocol.HttpProtobuf
+            && options.Protocol != OtlpExportProtocol.HttpJson)
         {
             throw new NotSupportedException($"Protocol {options.Protocol} is not supported.");
         }
@@ -179,5 +181,19 @@ internal static class OtlpExporterOptionsExtensions
         }
 
         return new Uri(string.Concat(uri.AbsoluteUri, separator, path));
+    }
+
+    internal static void ValidateEndpoint(this OtlpExporterOptions options)
+    {
+        var httpClient = options.HttpClientFactory?.Invoke() ?? throw new InvalidOperationException("OtlpExporterOptions was missing HttpClientFactory or it returned null.");
+
+        if (options.Protocol != OtlpExportProtocol.Grpc
+            && options.Protocol != OtlpExportProtocol.HttpProtobuf
+            && options.Protocol != OtlpExportProtocol.HttpJson)
+        {
+            throw new NotSupportedException($"Protocol {options.Protocol} is not supported.");
+        }
+
+        // ... rest of existing validation code ...
     }
 }
