@@ -24,14 +24,14 @@ internal sealed class OtelEnvResourceDetector : IResourceDetector
 
         if (this.configuration.TryGetStringValue(EnvVarKey, out string? envResourceAttributeValue))
         {
-            var attributes = ParseResourceAttributes(envResourceAttributeValue!);
+            var attributes = ParseResourceAttributes(envResourceAttributeValue);
             resource = new Resource(attributes);
         }
 
         return resource;
     }
 
-    private static IEnumerable<KeyValuePair<string, object>> ParseResourceAttributes(string resourceAttributes)
+    private static List<KeyValuePair<string, object>> ParseResourceAttributes(string resourceAttributes)
     {
         var attributes = new List<KeyValuePair<string, object>>();
 

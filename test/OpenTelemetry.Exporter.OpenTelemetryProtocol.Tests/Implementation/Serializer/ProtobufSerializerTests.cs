@@ -102,6 +102,14 @@ public class ProtobufSerializerTests
     [InlineData(268435455, new byte[] { 0xFF, 0xFF, 0xFF, 0x7F })] // Max 4-byte value
     public void WriteReservedLength_WritesCorrectly(int length, byte[] expectedBytes)
     {
+#if NET
+        Assert.NotNull(expectedBytes);
+#else
+        if (expectedBytes == null)
+        {
+            throw new ArgumentNullException(nameof(expectedBytes));
+        }
+#endif
         byte[] buffer = new byte[10];
         ProtobufSerializer.WriteReservedLength(buffer, 0, length);
 
@@ -246,7 +254,7 @@ public class ProtobufSerializerTests
         Assert.Equal(10, buffer[0]); // Tag
         Assert.Equal(5, buffer[1]); // Length
 
-        byte[] expectedContent = Encoding.ASCII.GetBytes("Hello");
+        byte[] expectedContent = "Hello"u8.ToArray();
         byte[] actualContent = new byte[5];
         Array.Copy(buffer, 2, actualContent, 0, 5);
         Assert.True(expectedContent.SequenceEqual(actualContent));

@@ -21,6 +21,8 @@ public class AggregatorTests
         this.aggregatorStore = new(MetricStreamIdentity, AggregationType.HistogramWithBuckets, AggregationTemporality.Cumulative, 1024);
     }
 
+    public static TheoryData<HistogramBoundaryTestCase> HistogramInfinityBoundariesTestCases => HistogramBoundaryTestCase.HistogramInfinityBoundariesTestCases();
+
     [Fact]
     public void HistogramDistributeToAllBucketsDefault()
     {
@@ -285,13 +287,13 @@ public class AggregatorTests
 
         Assert.Equal(expected, actual);
 
-        actual = new List<long>();
+        actual = [];
         foreach (var bucketCount in data.NegativeBuckets)
         {
             actual.Add(bucketCount);
         }
 
-        expected = new List<long>();
+        expected = [];
         foreach (var bucketCount in expectedData.NegativeBuckets)
         {
             expected.Add(bucketCount);
@@ -450,6 +452,40 @@ public class AggregatorTests
         Assert.Equal(expectedScale, metricPoint.GetExponentialHistogramData().Scale);
     }
 
+    [Theory]
+    [MemberData(nameof(HistogramBoundaryTestCase.HistogramInfinityBoundariesTestCases))]
+    internal void HistogramBucketBoundariesTest(HistogramBoundaryTestCase boundaryTestCase)
+    {
+        // Arrange
+        var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.HistogramWithBuckets, null, boundaryTestCase.InputBoundaries, Metric.DefaultExponentialHistogramMaxBuckets, Metric.DefaultExponentialHistogramMaxScale);
+        var expectedTotalBuckets = boundaryTestCase.ExpectedBucketCounts.Length;
+
+        // Act
+        foreach (var value in boundaryTestCase.InputValues)
+        {
+            histogramPoint.Update(value);
+        }
+
+        histogramPoint.TakeSnapshot(true);
+
+        // Assert
+        var count = histogramPoint.GetHistogramCount();
+        Assert.Equal(boundaryTestCase.InputValues.Length, count);
+
+        int bucketIndex = 0;
+        int actualBucketCount = 0;
+
+        foreach (var histogramBucket in histogramPoint.GetHistogramBuckets())
+        {
+            Assert.Equal(boundaryTestCase.ExpectedBucketCounts[bucketIndex], histogramBucket.BucketCount);
+            Assert.Equal(boundaryTestCase.ExpectedBucketBounds[bucketIndex], histogramBucket.ExplicitBound);
+            bucketIndex++;
+            actualBucketCount++;
+        }
+
+        Assert.Equal(expectedTotalBuckets, actualBucketCount);
+    }
+
     private static void HistogramSnapshotThread(object? obj)
     {
         var args = obj as ThreadArguments;
@@ -493,7 +529,7 @@ public class AggregatorTests
         Interlocked.Increment(ref args.ThreadsFinishedAllUpdatesCount);
     }
 
-    private class ThreadArguments
+    private sealed class ThreadArguments
     {
         public readonly ManualResetEvent MreToEnsureAllThreadsStart;
         public MetricPoint HistogramPoint;

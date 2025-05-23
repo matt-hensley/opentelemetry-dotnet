@@ -14,7 +14,9 @@ namespace OpenTelemetry;
 /// </summary>
 // Note: Does not implement IReadOnlyCollection<> or IEnumerable<> to
 // prevent accidental boxing.
+#pragma warning disable CA1711 // Identifiers should not have incorrect suffix
 public readonly struct ReadOnlyFilteredTagCollection
+#pragma warning restore CA1711 // Identifiers should not have incorrect suffix
 {
 #if NET
     private readonly FrozenSet<string>? excludedKeys;
@@ -22,7 +24,6 @@ public readonly struct ReadOnlyFilteredTagCollection
     private readonly HashSet<string>? excludedKeys;
 #endif
     private readonly KeyValuePair<string, object?>[] tags;
-    private readonly int count;
 
     internal ReadOnlyFilteredTagCollection(
 #if NET
@@ -38,7 +39,7 @@ public readonly struct ReadOnlyFilteredTagCollection
 
         this.excludedKeys = excludedKeys;
         this.tags = tags;
-        this.count = count;
+        this.MaximumCount = count;
     }
 
     /// <summary>
@@ -48,7 +49,7 @@ public readonly struct ReadOnlyFilteredTagCollection
     /// Note: Enumerating the collection may return fewer results depending on
     /// the filter.
     /// </remarks>
-    internal int MaximumCount => this.count;
+    internal int MaximumCount { get; }
 
     /// <summary>
     /// Returns an enumerator that iterates through the tags.

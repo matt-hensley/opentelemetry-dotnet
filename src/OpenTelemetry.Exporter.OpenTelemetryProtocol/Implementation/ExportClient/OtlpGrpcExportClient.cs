@@ -46,7 +46,7 @@ internal sealed class OtlpGrpcExportClient : OtlpExportClient
             var trailingHeaders = httpResponse.TrailingHeaders();
             Status status = GrpcProtocolHelpers.GetResponseStatus(httpResponse, trailingHeaders);
 
-            if (status.Detail.Equals(Status.NoReplyDetailMessage))
+            if (status.Detail.Equals(Status.NoReplyDetailMessage, StringComparison.Ordinal))
             {
 #if NET
                 using var responseStream = httpResponse.Content.ReadAsStream(cancellationToken);
@@ -93,7 +93,7 @@ internal sealed class OtlpGrpcExportClient : OtlpExportClient
                 grpcStatusDetailsHeader = GrpcProtocolHelpers.GetHeaderValue(trailingHeaders, GrpcStatusDetailsHeader);
             }
 
-            OpenTelemetryProtocolExporterEventSource.Log.ExportFailure(this.Endpoint.ToString(), "Export failed due to unexpected status code.");
+            OpenTelemetryProtocolExporterEventSource.Log.ExportFailure(this.Endpoint, "Export failed due to unexpected status code.", status);
 
             return new ExportClientGrpcResponse(
                 success: false,

@@ -17,8 +17,6 @@ internal static partial class PrometheusSerializer
 {
 #pragma warning disable SA1310 // Field name should not contain an underscore
     private const byte ASCII_QUOTATION_MARK = 0x22; // '"'
-    private const byte ASCII_FULL_STOP = 0x2E; // '.'
-    private const byte ASCII_HYPHEN_MINUS = 0x2D; // '-'
     private const byte ASCII_REVERSE_SOLIDUS = 0x5C; // '\\'
     private const byte ASCII_LINEFEED = 0x0A; // `\n`
 #pragma warning restore SA1310 // Field name should not contain an underscore
@@ -102,15 +100,12 @@ internal static partial class PrometheusSerializer
             buffer[cursor++] = unchecked((byte)(0b_1100_0000 | (ordinal >> 6)));
             buffer[cursor++] = unchecked((byte)(0b_1000_0000 | (ordinal & 0b_0011_1111)));
         }
-        else if (ordinal <= 0xFFFF)
+        else
         {
+            // all other <= 0xFFFF which is ushort.MaxValue
             buffer[cursor++] = unchecked((byte)(0b_1110_0000 | (ordinal >> 12)));
             buffer[cursor++] = unchecked((byte)(0b_1000_0000 | ((ordinal >> 6) & 0b_0011_1111)));
             buffer[cursor++] = unchecked((byte)(0b_1000_0000 | (ordinal & 0b_0011_1111)));
-        }
-        else
-        {
-            Debug.Assert(ordinal <= 0xFFFF, ".NET string should not go beyond Unicode BMP.");
         }
 
         return cursor;

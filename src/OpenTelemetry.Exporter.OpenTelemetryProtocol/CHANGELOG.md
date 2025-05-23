@@ -7,6 +7,54 @@ Notes](../../RELEASENOTES.md).
 
 ## Unreleased
 
+* Fixed an issue in .NET Framework where OTLP export of traces, logs, and
+  metrics using `OtlpExportProtocol.Grpc` did not correctly set the initial
+  write position, resulting in gRPC protocol errors.
+  ([#6280](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6280))
+
+## 1.12.0
+
+Released 2025-Apr-29
+
+* **Breaking Change**: .NET Framework and .NET Standard builds now default to
+  exporting over OTLP/HTTP instead of OTLP/gRPC. **This change could result in a
+  failure to export telemetry unless appropriate measures are taken.**
+  Additionally, if you explicitly configure the exporter to use OTLP/gRPC it may
+  result in a `NotSupportedException` without further configuration. Please
+  carefully review issue
+  ([#6209](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6209))
+  for additional information and workarounds.
+  ([#6229](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6229))
+
+## 1.11.2
+
+Released 2025-Mar-04
+
+* Fixed a bug in .NET Framework gRPC export client where the default success
+  export response was incorrectly marked as false, now changed to true, ensuring
+  exports are correctly marked as successful.
+  ([#6099](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6099))
+
+* Fixed an issues causing trace exports to fail when
+  `Activity.StatusDescription` exceeds 127 bytes.
+  ([#6119](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6119))
+
+* Fixed incorrect log serialization of attributes with null values, causing
+  some backends to reject logs.
+  ([#6149](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6149))
+
+## 1.11.1
+
+Released 2025-Jan-22
+
+* Fixed an issue where the OTLP gRPC exporter did not export logs, metrics, or
+  traces in .NET Framework projects.
+  ([#6083](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6083))
+
+## 1.11.0
+
+Released 2025-Jan-15
+
 ## 1.11.0-rc.1
 
 Released 2024-Dec-11

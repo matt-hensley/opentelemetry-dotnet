@@ -51,14 +51,18 @@ public class OtlpMetricExporter : BaseExporter<Metric>
         Debug.Assert(exporterOptions != null, "exporterOptions was null");
         Debug.Assert(experimentalOptions != null, "experimentalOptions was null");
 
+#pragma warning disable CS0618 // Suppressing gRPC obsolete warning
         this.startWritePosition = exporterOptions!.Protocol == OtlpExportProtocol.Grpc ? GrpcStartWritePosition : 0;
+#pragma warning restore CS0618 // Suppressing gRPC obsolete warning
         this.transmissionHandler = transmissionHandler ?? exporterOptions!.GetExportTransmissionHandler(experimentalOptions!, OtlpSignalType.Metrics);
     }
 
     internal Resource Resource => this.resource ??= this.ParentProvider.GetResource();
 
     /// <inheritdoc />
+#pragma warning disable CA1725 // Parameter names should match base declaration
     public override ExportResult Export(in Batch<Metric> metrics)
+#pragma warning restore CA1725 // Parameter names should match base declaration
     {
         // Prevents the exporter's gRPC and HTTP operations from being instrumented.
         using var scope = SuppressInstrumentationScope.Begin();

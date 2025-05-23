@@ -13,10 +13,10 @@ public class CompositeActivityProcessorTests
     public void CompositeActivityProcessor_BadArgs()
     {
         Assert.Throws<ArgumentNullException>(() => new CompositeProcessor<Activity>(null!));
-        Assert.Throws<ArgumentException>(() => new CompositeProcessor<Activity>(Array.Empty<BaseProcessor<Activity>>()));
+        Assert.Throws<ArgumentException>(() => new CompositeProcessor<Activity>([]));
 
         using var p1 = new TestActivityProcessor(null, null);
-        using var processor = new CompositeProcessor<Activity>(new[] { p1 });
+        using var processor = new CompositeProcessor<Activity>([p1]);
         Assert.Throws<ArgumentNullException>(() => processor.AddProcessor(null!));
     }
 
@@ -34,7 +34,7 @@ public class CompositeActivityProcessorTests
 
         using var activity = new Activity("test");
 
-        using (var processor = new CompositeProcessor<Activity>(new[] { p1, p2 }))
+        using (var processor = new CompositeProcessor<Activity>([p1, p2]))
         {
             processor.OnStart(activity);
             processor.OnEnd(activity);
@@ -47,14 +47,14 @@ public class CompositeActivityProcessorTests
     public void CompositeActivityProcessor_ProcessorThrows()
     {
         using var p1 = new TestActivityProcessor(
-            activity => { throw new Exception("Start exception"); },
-            activity => { throw new Exception("End exception"); });
+            _ => throw new InvalidOperationException("Start exception"),
+            _ => throw new InvalidOperationException("End exception"));
 
         using var activity = new Activity("test");
 
-        using var processor = new CompositeProcessor<Activity>(new[] { p1 });
-        Assert.Throws<Exception>(() => { processor.OnStart(activity); });
-        Assert.Throws<Exception>(() => { processor.OnEnd(activity); });
+        using var processor = new CompositeProcessor<Activity>([p1]);
+        Assert.Throws<InvalidOperationException>(() => { processor.OnStart(activity); });
+        Assert.Throws<InvalidOperationException>(() => { processor.OnEnd(activity); });
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class CompositeActivityProcessorTests
         using var p1 = new TestActivityProcessor(null, null);
         using var p2 = new TestActivityProcessor(null, null);
 
-        using var processor = new CompositeProcessor<Activity>(new[] { p1, p2 });
+        using var processor = new CompositeProcessor<Activity>([p1, p2]);
         processor.Shutdown();
         Assert.True(p1.ShutdownCalled);
         Assert.True(p2.ShutdownCalled);
@@ -78,7 +78,7 @@ public class CompositeActivityProcessorTests
         using var p1 = new TestActivityProcessor(null, null);
         using var p2 = new TestActivityProcessor(null, null);
 
-        using var processor = new CompositeProcessor<Activity>(new[] { p1, p2 });
+        using var processor = new CompositeProcessor<Activity>([p1, p2]);
         processor.ForceFlush(timeout);
 
         Assert.True(p1.ForceFlushCalled);
@@ -93,7 +93,7 @@ public class CompositeActivityProcessorTests
         using var p1 = new TestActivityProcessor(null, null);
         using var p2 = new TestActivityProcessor(null, null);
 
-        using var processor = new CompositeProcessor<Activity>(new[] { p1, p2 });
+        using var processor = new CompositeProcessor<Activity>([p1, p2]);
 
         Assert.Null(processor.ParentProvider);
         Assert.Null(p1.ParentProvider);

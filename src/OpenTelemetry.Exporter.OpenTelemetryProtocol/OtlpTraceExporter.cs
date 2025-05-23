@@ -54,14 +54,18 @@ public class OtlpTraceExporter : BaseExporter<Activity>
         Debug.Assert(sdkLimitOptions != null, "sdkLimitOptions was null");
 
         this.sdkLimitOptions = sdkLimitOptions!;
+#pragma warning disable CS0618 // Suppressing gRPC obsolete warning
         this.startWritePosition = exporterOptions!.Protocol == OtlpExportProtocol.Grpc ? GrpcStartWritePosition : 0;
+#pragma warning restore CS0618 // Suppressing gRPC obsolete warning
         this.transmissionHandler = transmissionHandler ?? exporterOptions!.GetExportTransmissionHandler(experimentalOptions, OtlpSignalType.Traces);
     }
 
     internal Resource Resource => this.resource ??= this.ParentProvider.GetResource();
 
     /// <inheritdoc/>
+#pragma warning disable CA1725 // Parameter names should match base declaration
     public override ExportResult Export(in Batch<Activity> activityBatch)
+#pragma warning restore CA1725 // Parameter names should match base declaration
     {
         // Prevents the exporter's gRPC and HTTP operations from being instrumented.
         using var scope = SuppressInstrumentationScope.Begin();

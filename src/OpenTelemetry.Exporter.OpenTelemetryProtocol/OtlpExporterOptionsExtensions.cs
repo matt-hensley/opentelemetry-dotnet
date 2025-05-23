@@ -31,23 +31,33 @@ internal static class OtlpExporterOptionsExtensions
         {
             // According to the specification, URL-encoded headers must be supported.
             optionHeaders = Uri.UnescapeDataString(optionHeaders);
+            ReadOnlySpan<char> headersSpan = optionHeaders.AsSpan();
 
-            Array.ForEach(
-                optionHeaders.Split(','),
-                (pair) =>
+            while (!headersSpan.IsEmpty)
+            {
+                int commaIndex = headersSpan.IndexOf(',');
+                ReadOnlySpan<char> pair;
+                if (commaIndex == -1)
                 {
-                    // Specify the maximum number of substrings to return to 2
-                    // This treats everything that follows the first `=` in the string as the value to be added for the metadata key
-                    var keyValueData = pair.Split(new char[] { '=' }, 2);
-                    if (keyValueData.Length != 2)
-                    {
-                        throw new ArgumentException("Headers provided in an invalid format.");
-                    }
+                    pair = headersSpan;
+                    headersSpan = [];
+                }
+                else
+                {
+                    pair = headersSpan.Slice(0, commaIndex);
+                    headersSpan = headersSpan.Slice(commaIndex + 1);
+                }
 
-                    var key = keyValueData[0].Trim();
-                    var value = keyValueData[1].Trim();
-                    addHeader(headers, key, value);
-                });
+                int equalIndex = pair.IndexOf('=');
+                if (equalIndex == -1)
+                {
+                    throw new ArgumentException("Headers provided in an invalid format.");
+                }
+
+                var key = pair.Slice(0, equalIndex).Trim().ToString();
+                var value = pair.Slice(equalIndex + 1).Trim().ToString();
+                addHeader(headers, key, value);
+            }
         }
 
         foreach (var header in OtlpExporterOptions.StandardHeaders)
@@ -92,6 +102,7 @@ internal static class OtlpExporterOptionsExtensions
     {
         var httpClient = options.HttpClientFactory?.Invoke() ?? throw new InvalidOperationException("OtlpExporterOptions was missing HttpClientFactory or it returned null.");
 
+#pragma warning disable CS0618 // Suppressing gRPC obsolete warning
         if (options.Protocol != OtlpExportProtocol.Grpc
             && options.Protocol != OtlpExportProtocol.HttpProtobuf
             && options.Protocol != OtlpExportProtocol.HttpJson)
@@ -115,6 +126,7 @@ internal static class OtlpExporterOptionsExtensions
 
             _ => throw new NotSupportedException($"OtlpSignalType {otlpSignalType} is not supported."),
         };
+#pragma warning restore CS0618 // Suppressing gRPC obsolete warning
     }
 
     public static void TryEnableIHttpClientFactoryIntegration(this OtlpExporterOptions options, IServiceProvider serviceProvider, string httpClientName)
@@ -135,11 +147,11 @@ internal static class OtlpExporterOptionsExtensions
                             "CreateClient",
                             BindingFlags.Public | BindingFlags.Instance,
                             binder: null,
-                            new Type[] { typeof(string) },
+                            [typeof(string)],
                             modifiers: null);
                         if (createClientMethod != null)
                         {
-                            HttpClient? client = (HttpClient?)createClientMethod.Invoke(httpClientFactory, new object[] { httpClientName });
+                            HttpClient? client = (HttpClient?)createClientMethod.Invoke(httpClientFactory, [httpClientName]);
 
                             if (client != null)
                             {
@@ -161,7 +173,11 @@ internal static class OtlpExporterOptionsExtensions
         var absoluteUri = uri.AbsoluteUri;
         var separator = string.Empty;
 
-        if (absoluteUri.EndsWith("/"))
+#if NET || NETSTANDARD2_1_OR_GREATER
+        if (absoluteUri.EndsWith('/'))
+#else
+        if (absoluteUri.EndsWith("/", StringComparison.Ordinal))
+#endif
         {
             // Endpoint already ends with 'path/'
             if (absoluteUri.EndsWith(string.Concat(path, "/"), StringComparison.OrdinalIgnoreCase))

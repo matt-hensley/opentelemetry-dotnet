@@ -10,7 +10,7 @@ using OpenTelemetry.Resources;
 
 namespace Examples.Console;
 
-internal class TestMetrics
+internal sealed class TestMetrics
 {
     internal static int Run(MetricsOptions options)
     {
@@ -37,10 +37,10 @@ internal class TestMetrics
              * launch the OpenTelemetry Collector with an OTLP receiver, by running:
              *
              *  - On Unix based systems use:
-             *     docker run --rm -it -p 4317:4317 -v $(pwd):/cfg otel/opentelemetry-collector:0.33.0 --config=/cfg/otlp-collector-example/config.yaml
+             *     docker run --rm -it -p 4317:4317 -v $(pwd):/cfg otel/opentelemetry-collector:0.123.0 --config=/cfg/otlp-collector-example/config.yaml
              *
              *  - On Windows use:
-             *     docker run --rm -it -p 4317:4317 -v "%cd%":/cfg otel/opentelemetry-collector:0.33.0 --config=/cfg/otlp-collector-example/config.yaml
+             *     docker run --rm -it -p 4317:4317 -v "%cd%":/cfg otel/opentelemetry-collector:0.123.0 --config=/cfg/otlp-collector-example/config.yaml
              *
              * Open another terminal window at the examples/Console/ directory and
              * launch the OTLP example by running:
@@ -97,7 +97,7 @@ internal class TestMetrics
             {
                 return new List<Measurement<int>>()
                 {
-                    new Measurement<int>(
+                    new(
                         (int)Process.GetCurrentProcess().PrivateMemorySize64,
                         new KeyValuePair<string, object?>("tag1", "value1")),
                 };

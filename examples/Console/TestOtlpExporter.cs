@@ -20,10 +20,10 @@ internal static class TestOtlpExporter
          * launch the OpenTelemetry Collector with an OTLP receiver, by running:
          *
          *  - On Unix based systems use:
-         *     docker run --rm -it -p 4317:4317 -p 4318:4318 -v $(pwd):/cfg otel/opentelemetry-collector:latest --config=/cfg/otlp-collector-example/config.yaml
+         *     docker run --rm -it -p 4317:4317 -p 4318:4318 -v $(pwd):/cfg otel/opentelemetry-collector:0.123.0 --config=/cfg/otlp-collector-example/config.yaml
          *
          *  - On Windows use:
-         *     docker run --rm -it -p 4317:4317 -p 4318:4318 -v "%cd%":/cfg otel/opentelemetry-collector:latest --config=/cfg/otlp-collector-example/config.yaml
+         *     docker run --rm -it -p 4317:4317 -p 4318:4318 -v "%cd%":/cfg otel/opentelemetry-collector:0.123.0 --config=/cfg/otlp-collector-example/config.yaml
          *
          * Open another terminal window at the examples/Console/ directory and
          * launch the OTLP example by running:
@@ -69,24 +69,22 @@ internal static class TestOtlpExporter
 
         // The above line is required only in Applications
         // which decide to use OpenTelemetry.
-        using (var sample = new InstrumentationWithActivitySource())
-        {
-            sample.Start();
+        using var sample = new InstrumentationWithActivitySource();
+        sample.Start();
 
-            System.Console.WriteLine("Traces are being created and exported " +
-                "to the OpenTelemetry Collector in the background. " +
-                "Press ENTER to stop.");
-            System.Console.ReadLine();
-        }
+        System.Console.WriteLine("Traces are being created and exported " +
+                                 "to the OpenTelemetry Collector in the background. " +
+                                 "Press ENTER to stop.");
+        System.Console.ReadLine();
 
         return 0;
     }
 
     private static OtlpExportProtocol? ToOtlpExportProtocol(string? protocol) =>
-        protocol?.Trim().ToLower() switch
+        protocol?.Trim().ToUpperInvariant() switch
         {
-            "grpc" => OtlpExportProtocol.Grpc,
-            "http/protobuf" => OtlpExportProtocol.HttpProtobuf,
+            "GRPC" => OtlpExportProtocol.Grpc,
+            "HTTP/PROTOBUF" => OtlpExportProtocol.HttpProtobuf,
             _ => null,
         };
 }

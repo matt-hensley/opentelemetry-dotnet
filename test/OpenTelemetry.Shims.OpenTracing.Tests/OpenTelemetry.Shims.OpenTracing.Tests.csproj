@@ -4,9 +4,12 @@
     <Description>Unit test project for OpenTelemetry.Shims.OpenTracing</Description>
     <TargetFrameworks>$(TargetFrameworksForTests)</TargetFrameworks>
     <DefineConstants Condition="'$(RunningDotNetPack)' != 'true'">$(DefineConstants);BUILDING_USING_PROJECTS</DefineConstants>
+	  <AnalysisLevel>latest-all</AnalysisLevel>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="GitHubActionsTestLogger" />
+    <PackageReference Include="JunitXml.TestLogger" />
     <PackageReference Include="NuGet.Versioning"/>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

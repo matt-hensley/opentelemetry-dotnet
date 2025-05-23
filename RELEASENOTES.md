@@ -4,7 +4,37 @@ This file contains highlights and announcements covering all components.
 For more details see `CHANGELOG.md` files maintained in the root source
 directory of each individual package.
 
+## 1.12.0
+
+Release details: [1.12.0](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.12.0)
+
+* **Breaking Change**: `OpenTelemetry.Exporter.OpenTelemetryProtocol` now
+  defaults to using OTLP/HTTP instead of OTLP/gRPC when targeting .NET Framework
+  and .NET Standard. This change may cause telemetry export to fail unless
+  appropriate adjustments are made. Explicitly setting OTLP/gRPC may result in a
+  `NotSupportedException` unless further configuration is applied. See
+  [#6209](https://github.com/open-telemetry/opentelemetry-dotnet/issues/6209) for
+  full details and mitigation guidance. [#6229](https://github.com/open-telemetry/opentelemetry-dotnet/pull/6229)
+
+## 1.11.1
+
+Release details: [1.11.1](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.11.1)
+
+* Fixed a bug preventing `OpenTelemetry.Exporter.OpenTelemetryProtocol` from
+  exporting telemetry on .NET Framework.
+
+## 1.11.0
+
+Release details: [1.11.0](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.11.0)
+
+* `OpenTelemetry.Exporter.OpenTelemetryProtocol` no longer depends on the
+  `Google.Protobuf`, `Grpc`, or `Grpc.Net.Client` packages. Serialization and
+  transmission of outgoing data is now performed manually to improve the overall
+  performance.
+
 ## 1.10.0
+
+Release details: [1.10.0](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.10.0)
 
 * Bumped the package versions of `System.Diagnostic.DiagnosticSource` and other
   Microsoft.Extensions.* packages to `9.0.0`.
@@ -50,6 +80,8 @@ directory of each individual package.
 
 ## 1.9.0
 
+Release details: [1.9.0](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.9.0)
+
 * `Exemplars` are now part of the stable API! For details see: [customizing
   exemplars
   collection](https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/metrics/customizing-the-sdk#exemplars).
@@ -59,6 +91,8 @@ directory of each individual package.
   parity in their APIs.
 
 ## 1.8.0
+
+Release details: [1.8.0](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.8.0)
 
 * `TracerProvider` sampler can now be configured via the `OTEL_TRACES_SAMPLER` &
   `OTEL_TRACES_SAMPLER_ARG` envvars.
@@ -71,6 +105,8 @@ directory of each individual package.
   Previously an experimental environment variable had to be set.
 
 ## 1.7.0
+
+Release details: [1.7.0](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.7.0)
 
 * Bumped the package versions of System.Diagnostic.DiagnosticSource and other
   Microsoft.Extensions.* packages to `8.0.0`.

@@ -11,27 +11,27 @@ using OtlpTrace = OpenTelemetry.Proto.Trace.V1;
 
 namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.Implementation.Serializer;
 
-public class OtlpArrayTagWriterTests : IDisposable
+public sealed class OtlpArrayTagWriterTests : IDisposable
 {
     private readonly ProtobufOtlpTagWriter.OtlpArrayTagWriter arrayTagWriter;
+    private readonly ActivityListener activityListener;
 
     static OtlpArrayTagWriterTests()
     {
         Activity.DefaultIdFormat = ActivityIdFormat.W3C;
         Activity.ForceDefaultIdFormat = true;
-
-        var listener = new ActivityListener
-        {
-            ShouldListenTo = _ => true,
-            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllData,
-        };
-
-        ActivitySource.AddActivityListener(listener);
     }
 
     public OtlpArrayTagWriterTests()
     {
         this.arrayTagWriter = new ProtobufOtlpTagWriter.OtlpArrayTagWriter();
+        this.activityListener = new ActivityListener
+        {
+            ShouldListenTo = _ => true,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
+        };
+
+        ActivitySource.AddActivityListener(this.activityListener);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class OtlpArrayTagWriterTests : IDisposable
         // Assert
         Assert.NotNull(arrayState.Buffer);
         Assert.Equal(0, arrayState.WritePosition);
-        Assert.True(arrayState.Buffer.Length == 2048);
+        Assert.Equal(2048, arrayState.Buffer.Length);
     }
 
     [Fact]
@@ -166,10 +166,11 @@ public class OtlpArrayTagWriterTests : IDisposable
             lessthat1MBArray[i] = "1234";
         }
 
+        string?[] stringArray = ["12345"];
         var tags = new ActivityTagsCollection
         {
             new("lessthat1MBArray", lessthat1MBArray),
-            new("StringArray", new string?[] { "12345" }),
+            new("StringArray", stringArray),
             new("LargeArray", largeArray),
         };
 
@@ -181,7 +182,7 @@ public class OtlpArrayTagWriterTests : IDisposable
         var otlpSpan = ToOtlpSpanWithExtendedBuffer(new SdkLimitOptions(), activity);
 
         Assert.NotNull(otlpSpan);
-        Assert.True(otlpSpan.Attributes.Count == 3);
+        Assert.Equal(3, otlpSpan.Attributes.Count);
         var keyValue = otlpSpan.Attributes.FirstOrDefault(kvp => kvp.Key == "StringArray");
         Assert.NotNull(keyValue);
         Assert.Equal("12345", keyValue.Value.ArrayValue.Values[0].StringValue);
@@ -265,6 +266,7 @@ public class OtlpArrayTagWriterTests : IDisposable
     {
         // Clean up the thread buffer after each test
         ProtobufOtlpTagWriter.OtlpArrayTagWriter.ThreadBuffer = null;
+        this.activityListener.Dispose();
     }
 
     private static OtlpTrace.Span? ToOtlpSpan(SdkLimitOptions sdkOptions, Activity activity)

@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
-#if NETSTANDARD2_1_OR_GREATER || NET
 using System.Diagnostics.CodeAnalysis;
-#endif
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Internal;
@@ -18,11 +16,11 @@ namespace OpenTelemetry.Logs;
 internal sealed class LoggerProviderSdk : LoggerProvider
 {
     internal readonly IServiceProvider ServiceProvider;
-    internal readonly IDisposable? OwnedServiceProvider;
+    internal IDisposable? OwnedServiceProvider;
     internal bool Disposed;
     internal int ShutdownCount;
 
-    private readonly List<object> instrumentations = new();
+    private readonly List<object> instrumentations = [];
     private ILogRecordPool? threadStaticPool = LogRecordThreadStaticPool.Instance;
 
     public LoggerProviderSdk(
@@ -90,13 +88,36 @@ internal sealed class LoggerProviderSdk : LoggerProvider
 
     public ILogRecordPool LogRecordPool => this.threadStaticPool ?? LogRecordSharedPool.Current;
 
+    public static bool ContainsBatchProcessor(BaseProcessor<LogRecord> processor)
+    {
+        if (processor is BatchExportProcessor<LogRecord>)
+        {
+            return true;
+        }
+        else if (processor is CompositeProcessor<LogRecord> compositeProcessor)
+        {
+            var current = compositeProcessor.Head;
+            while (current != null)
+            {
+                if (ContainsBatchProcessor(current.Value))
+                {
+                    return true;
+                }
+
+                current = current.Next;
+            }
+        }
+
+        return false;
+    }
+
     public void AddProcessor(BaseProcessor<LogRecord> processor)
     {
         Guard.ThrowIfNull(processor);
 
         processor.SetParentProvider(this);
 
-        if (this.threadStaticPool != null && this.ContainsBatchProcessor(processor))
+        if (this.threadStaticPool != null && ContainsBatchProcessor(processor))
         {
             OpenTelemetrySdkEventSource.Log.LoggerProviderSdkEvent("Using shared thread pool.");
 
@@ -127,10 +148,10 @@ internal sealed class LoggerProviderSdk : LoggerProvider
             processorAdded.Append(processor);
             processorAdded.Append('\'');
 
-            var newCompositeProcessor = new CompositeProcessor<LogRecord>(new[]
-            {
+            var newCompositeProcessor = new CompositeProcessor<LogRecord>(
+            [
                 this.Processor,
-            });
+            ]);
             newCompositeProcessor.SetParentProvider(this);
             newCompositeProcessor.AddProcessor(processor);
             this.Processor = newCompositeProcessor;
@@ -170,29 +191,6 @@ internal sealed class LoggerProviderSdk : LoggerProvider
         }
     }
 
-    public bool ContainsBatchProcessor(BaseProcessor<LogRecord> processor)
-    {
-        if (processor is BatchExportProcessor<LogRecord>)
-        {
-            return true;
-        }
-        else if (processor is CompositeProcessor<LogRecord> compositeProcessor)
-        {
-            var current = compositeProcessor.Head;
-            while (current != null)
-            {
-                if (this.ContainsBatchProcessor(current.Value))
-                {
-                    return true;
-                }
-
-                current = current.Next;
-            }
-        }
-
-        return false;
-    }
-
     /// <inheritdoc />
 #if EXPOSE_EXPERIMENTAL_FEATURES
     protected
@@ -201,9 +199,7 @@ internal sealed class LoggerProviderSdk : LoggerProvider
 #endif
         override bool TryCreateLogger(
         string? name,
-#if NETSTANDARD2_1_OR_GREATER || NET
         [NotNullWhen(true)]
-#endif
         out Logger? logger)
     {
         logger = new LoggerSdk(this, name);
@@ -217,21 +213,20 @@ internal sealed class LoggerProviderSdk : LoggerProvider
         {
             if (disposing)
             {
-                if (this.instrumentations != null)
+                foreach (var item in this.instrumentations)
                 {
-                    foreach (var item in this.instrumentations)
-                    {
-                        (item as IDisposable)?.Dispose();
-                    }
-
-                    this.instrumentations.Clear();
+                    (item as IDisposable)?.Dispose();
                 }
+
+                this.instrumentations.Clear();
 
                 // Wait for up to 5 seconds grace period
                 this.Processor?.Shutdown(5000);
                 this.Processor?.Dispose();
+                this.Processor = null;
 
                 this.OwnedServiceProvider?.Dispose();
+                this.OwnedServiceProvider = null;
             }
 
             this.Disposed = true;

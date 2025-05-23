@@ -15,29 +15,39 @@ using Xunit;
 using OtlpCollector = OpenTelemetry.Proto.Collector.Trace.V1;
 using OtlpCommon = OpenTelemetry.Proto.Common.V1;
 using OtlpTrace = OpenTelemetry.Proto.Trace.V1;
-using Status = OpenTelemetry.Trace.Status;
 
 namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests;
 
 [Collection("xUnitCollectionPreventingTestsThatDependOnSdkConfigurationFromRunningInParallel")]
-public class OtlpTraceExporterTests
+public sealed class OtlpTraceExporterTests : IDisposable
 {
     private static readonly SdkLimitOptions DefaultSdkLimitOptions = new();
-
     private static readonly ExperimentalOptions DefaultExperimentalOptions = new();
+
+    private readonly ActivityListener activityListener;
 
     static OtlpTraceExporterTests()
     {
         Activity.DefaultIdFormat = ActivityIdFormat.W3C;
         Activity.ForceDefaultIdFormat = true;
+    }
 
-        var listener = new ActivityListener
+    public OtlpTraceExporterTests()
+    {
+        this.activityListener = new ActivityListener
         {
             ShouldListenTo = _ => true,
-            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllData,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => options.Parent.TraceFlags.HasFlag(ActivityTraceFlags.Recorded)
+                ? ActivitySamplingResult.AllDataAndRecorded
+                : ActivitySamplingResult.AllData,
         };
 
-        ActivitySource.AddActivityListener(listener);
+        ActivitySource.AddActivityListener(this.activityListener);
+    }
+
+    public void Dispose()
+    {
+        this.activityListener.Dispose();
     }
 
     [Fact]
@@ -151,7 +161,9 @@ public class OtlpTraceExporterTests
             .SetResourceBuilder(resourceBuilder)
             .AddSource(sources[0].Name)
             .AddSource(sources[1].Name)
+#pragma warning disable CA2000 // Dispose objects before losing scope
             .AddProcessor(new SimpleActivityExportProcessor(new InMemoryExporter<Activity>(exportedItems)));
+#pragma warning restore CA2000 // Dispose objects before losing scope
 
         using var openTelemetrySdk = builder.Build();
 
@@ -238,7 +250,9 @@ public class OtlpTraceExporterTests
             .SetResourceBuilder(resourceBuilder)
             .AddSource(activitySourceWithTags.Name)
             .AddSource(activitySourceWithoutTags.Name)
+#pragma warning disable CA2000 // Dispose objects before losing scope
             .AddProcessor(new SimpleActivityExportProcessor(new InMemoryExporter<Activity>(exportedItems)));
+#pragma warning restore CA2000 // Dispose objects before losing scope
 
         using var openTelemetrySdk = builder.Build();
 
@@ -326,7 +340,9 @@ public class OtlpTraceExporterTests
         var builder = Sdk.CreateTracerProviderBuilder()
             .SetResourceBuilder(resourceBuilder)
             .AddSource(activitySource.Name)
+#pragma warning disable CA2000 // Dispose objects before losing scope
             .AddProcessor(new SimpleActivityExportProcessor(new InMemoryExporter<Activity>(exportedItems)));
+#pragma warning restore CA2000 // Dispose objects before losing scope
 
         using var openTelemetrySdk = builder.Build();
 
@@ -353,7 +369,7 @@ public class OtlpTraceExporterTests
             Assert.Equal(3, scope.Attributes.Count);
             Assert.Equal(1u, scope.DroppedAttributesCount);
             Assert.Equal("1234", scope.Attributes[0].Value.StringValue);
-            this.ArrayValueAsserts(scope.Attributes[1].Value.ArrayValue.Values);
+            ArrayValueAsserts(scope.Attributes[1].Value.ArrayValue.Values);
             Assert.Equal(new object().ToString()!.Substring(0, 4), scope.Attributes[2].Value.StringValue);
         }
     }
@@ -400,7 +416,7 @@ public class OtlpTraceExporterTests
         Assert.Equal(3, otlpSpan.Attributes.Count);
         Assert.Equal(1u, otlpSpan.DroppedAttributesCount);
         Assert.Equal("1234", otlpSpan.Attributes[0].Value.StringValue);
-        this.ArrayValueAsserts(otlpSpan.Attributes[1].Value.ArrayValue.Values);
+        ArrayValueAsserts(otlpSpan.Attributes[1].Value.ArrayValue.Values);
         Assert.Equal(new object().ToString()!.Substring(0, 4), otlpSpan.Attributes[2].Value.StringValue);
 
         Assert.Single(otlpSpan.Events);
@@ -408,7 +424,7 @@ public class OtlpTraceExporterTests
         Assert.Equal(3, otlpSpan.Events[0].Attributes.Count);
         Assert.Equal(1u, otlpSpan.Events[0].DroppedAttributesCount);
         Assert.Equal("1234", otlpSpan.Events[0].Attributes[0].Value.StringValue);
-        this.ArrayValueAsserts(otlpSpan.Events[0].Attributes[1].Value.ArrayValue.Values);
+        ArrayValueAsserts(otlpSpan.Events[0].Attributes[1].Value.ArrayValue.Values);
         Assert.Equal(new object().ToString()!.Substring(0, 4), otlpSpan.Events[0].Attributes[2].Value.StringValue);
 
         Assert.Single(otlpSpan.Links);
@@ -416,7 +432,7 @@ public class OtlpTraceExporterTests
         Assert.Equal(3, otlpSpan.Links[0].Attributes.Count);
         Assert.Equal(1u, otlpSpan.Links[0].DroppedAttributesCount);
         Assert.Equal("1234", otlpSpan.Links[0].Attributes[0].Value.StringValue);
-        this.ArrayValueAsserts(otlpSpan.Links[0].Attributes[1].Value.ArrayValue.Values);
+        ArrayValueAsserts(otlpSpan.Links[0].Attributes[1].Value.ArrayValue.Values);
         Assert.Equal(new object().ToString()!.Substring(0, 4), otlpSpan.Links[0].Attributes[2].Value.StringValue);
     }
 
@@ -427,6 +443,11 @@ public class OtlpTraceExporterTests
 
         using var rootActivity = activitySource.StartActivity("root", ActivityKind.Producer);
 
+        bool[] boolArray = [true, false];
+        int[] intArray = [1, 2];
+        double[] doubleArray = [1.0, 2.09];
+        string[] stringArray = ["a", "b"];
+
         var attributes = new List<KeyValuePair<string, object?>>
         {
             new("bool", true),
@@ -435,10 +456,10 @@ public class OtlpTraceExporterTests
             new("double", 3.14),
             new("int", 1),
             new("datetime", DateTime.UtcNow),
-            new("bool_array", new bool[] { true, false }),
-            new("int_array", new int[] { 1, 2 }),
-            new("double_array", new double[] { 1.0, 2.09 }),
-            new("string_array", new string[] { "a", "b" }),
+            new("bool_array", boolArray),
+            new("int_array", intArray),
+            new("double_array", doubleArray),
+            new("string_array", stringArray),
             new("datetime_array", new DateTime[] { DateTime.UtcNow, DateTime.Now }),
         };
 
@@ -489,7 +510,7 @@ public class OtlpTraceExporterTests
 
         Assert.NotNull(childActivity);
 
-        childActivity.SetStatus(ActivityStatusCode.Error);
+        childActivity.SetStatus(ActivityStatusCode.Error, new string('a', 150));
 
         var childEvents = new List<ActivityEvent> { new("e0"), new("e1", default, new ActivityTagsCollection(attributes)) };
         childActivity.AddEvent(childEvents[0]);
@@ -510,7 +531,7 @@ public class OtlpTraceExporterTests
         Assert.NotNull(otlpSpan.Status);
         Assert.Equal(OtlpTrace.Status.Types.StatusCode.Error, otlpSpan.Status.Code);
 
-        Assert.Equal(Status.Error.Description ?? string.Empty, otlpSpan.Status.Message);
+        Assert.Equal(childActivity.StatusDescription ?? string.Empty, otlpSpan.Status.Message);
         Assert.Empty(otlpSpan.Attributes);
 
         Assert.Equal(childEvents.Count, otlpSpan.Events.Count);
@@ -561,6 +582,7 @@ public class OtlpTraceExporterTests
     [InlineData(ActivityStatusCode.Unset, "Description will be ignored if status is Unset.")]
     [InlineData(ActivityStatusCode.Ok, "Description will be ignored if status is Okay.")]
     [InlineData(ActivityStatusCode.Error, "Description will be kept if status is Error.")]
+    [InlineData(ActivityStatusCode.Error, "150 Character String - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     public void ToOtlpSpanNativeActivityStatusTest(ActivityStatusCode expectedStatusCode, string statusDescription)
     {
         using var activitySource = new ActivitySource(nameof(this.ToOtlpSpanTest));
@@ -634,6 +656,7 @@ public class OtlpTraceExporterTests
     [InlineData(StatusCode.Unset, "Unset", "Description will be ignored if status is Unset.")]
     [InlineData(StatusCode.Ok, "Ok", "Description must only be used with the Error StatusCode.")]
     [InlineData(StatusCode.Error, "Error", "Error description.")]
+    [InlineData(StatusCode.Error, "Error", "150 Character String - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     [Obsolete("Remove when ActivityExtensions status APIs are removed")]
     public void ToOtlpSpanStatusTagTest(StatusCode expectedStatusCode, string statusCodeTagValue, string statusDescription)
     {
@@ -749,7 +772,9 @@ public class OtlpTraceExporterTests
     public void UseOpenTelemetryProtocolActivityExporterWithCustomActivityProcessor()
     {
         const string ActivitySourceName = "otlp.test";
+#pragma warning disable CA2000 // Dispose objects before losing scope
         TestActivityProcessor testActivityProcessor = new TestActivityProcessor();
+#pragma warning restore CA2000 // Dispose objects before losing scope
 
         bool startCalled = false;
         bool endCalled = false;
@@ -786,7 +811,7 @@ public class OtlpTraceExporterTests
         var exportClientMock = new TestExportClient();
 
         var exporterOptions = new OtlpExporterOptions();
-        var transmissionHandler = new OtlpExporterTransmissionHandler(exportClientMock, exporterOptions.TimeoutMilliseconds);
+        using var transmissionHandler = new OtlpExporterTransmissionHandler(exportClientMock, exporterOptions.TimeoutMilliseconds);
 
         using var exporter = new OtlpTraceExporter(new OtlpExporterOptions(), DefaultSdkLimitOptions, DefaultExperimentalOptions, transmissionHandler);
         exporter.Shutdown();
@@ -1018,7 +1043,7 @@ public class OtlpTraceExporterTests
         return request;
     }
 
-    private void ArrayValueAsserts(RepeatedField<OtlpCommon.AnyValue> values)
+    private static void ArrayValueAsserts(RepeatedField<OtlpCommon.AnyValue> values)
     {
         var expectedStringArray = new string?[] { "1234", "1234", string.Empty, null };
         for (var i = 0; i < expectedStringArray.Length; ++i)

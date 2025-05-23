@@ -23,19 +23,11 @@ public class ExplicitBucketHistogramConfiguration : HistogramConfiguration
     /// </list>
     /// Note: A copy is made of the provided array.
     /// </remarks>
+#pragma warning disable CA1819 // Properties should not return arrays
     public double[]? Boundaries
+#pragma warning restore CA1819 // Properties should not return arrays
     {
-        get
-        {
-            if (this.CopiedBoundaries != null)
-            {
-                double[] copy = new double[this.CopiedBoundaries.Length];
-                this.CopiedBoundaries.AsSpan().CopyTo(copy);
-                return copy;
-            }
-
-            return null;
-        }
+        get => this.CopiedBoundaries?.ToArray();
 
         set
         {
@@ -46,9 +38,7 @@ public class ExplicitBucketHistogramConfiguration : HistogramConfiguration
                     throw new ArgumentException($"Histogram boundaries are invalid. Histogram boundaries must be in ascending order with distinct values.", nameof(value));
                 }
 
-                double[] copy = new double[value.Length];
-                value.AsSpan().CopyTo(copy);
-                this.CopiedBoundaries = copy;
+                this.CopiedBoundaries = value.ToArray();
             }
             else
             {

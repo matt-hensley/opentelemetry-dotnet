@@ -15,22 +15,32 @@ using OtlpCollector = OpenTelemetry.Proto.Collector.Trace.V1;
 
 namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests;
 
-public class OtlpHttpTraceExportClientTests
+public sealed class OtlpHttpTraceExportClientTests : IDisposable
 {
     private static readonly SdkLimitOptions DefaultSdkLimitOptions = new();
+
+    private readonly ActivityListener activityListener;
 
     static OtlpHttpTraceExportClientTests()
     {
         Activity.DefaultIdFormat = ActivityIdFormat.W3C;
         Activity.ForceDefaultIdFormat = true;
+    }
 
-        var listener = new ActivityListener
+    public OtlpHttpTraceExportClientTests()
+    {
+        this.activityListener = new ActivityListener
         {
             ShouldListenTo = _ => true,
-            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllData,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
         };
 
-        ActivitySource.AddActivityListener(listener);
+        ActivitySource.AddActivityListener(this.activityListener);
+    }
+
+    public void Dispose()
+    {
+        this.activityListener.Dispose();
     }
 
     [Fact]
@@ -80,11 +90,11 @@ public class OtlpHttpTraceExportClientTests
             Headers = $"{header1.Name}={header1.Value}, {header2.Name} = {header2.Value}",
         };
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
         var testHttpHandler = new TestHttpMessageHandler();
+#pragma warning restore CA2000 // Dispose objects before losing scope
 
-        var httpRequestContent = Array.Empty<byte>();
-
-        var httpClient = new HttpClient(testHttpHandler);
+        using var httpClient = new HttpClient(testHttpHandler);
 
         var exportClient = new OtlpHttpExportClient(options, httpClient, string.Empty);
 
@@ -107,7 +117,9 @@ public class OtlpHttpTraceExportClientTests
         using var openTelemetrySdk = builder.Build();
 
         var exportedItems = new List<Activity>();
+#pragma warning disable CA2000 // Dispose objects before losing scope
         var processor = new BatchActivityExportProcessor(new InMemoryExporter<Activity>(exportedItems));
+#pragma warning restore CA2000 // Dispose objects before losing scope
         const int numOfSpans = 10;
         bool isEven;
         for (var i = 0; i < numOfSpans; i++)

@@ -17,20 +17,20 @@ internal sealed class MeterProviderSdk : MeterProvider
     internal const string ExemplarFilterHistogramsConfigKey = "OTEL_DOTNET_EXPERIMENTAL_METRICS_EXEMPLAR_FILTER_HISTOGRAMS";
 
     internal readonly IServiceProvider ServiceProvider;
-    internal readonly IDisposable? OwnedServiceProvider;
+    internal IDisposable? OwnedServiceProvider;
     internal int ShutdownCount;
     internal bool Disposed;
     internal ExemplarFilterType? ExemplarFilter;
     internal ExemplarFilterType? ExemplarFilterForHistograms;
     internal Action? OnCollectObservableInstruments;
 
-    private readonly List<object> instrumentations = new();
+    private readonly List<object> instrumentations = [];
     private readonly List<Func<Instrument, MetricStreamConfiguration?>> viewConfigs;
     private readonly Lock collectLock = new();
     private readonly MeterListener listener;
-    private readonly MetricReader? reader;
-    private readonly CompositeMetricReader? compositeMetricReader;
     private readonly Func<Instrument, bool> shouldListenTo = instrument => false;
+    private CompositeMetricReader? compositeMetricReader;
+    private MetricReader? reader;
 
     internal MeterProviderSdk(
         IServiceProvider serviceProvider,
@@ -95,7 +95,7 @@ internal sealed class MeterProviderSdk : MeterProvider
             }
             else
             {
-                this.reader = new CompositeMetricReader(new[] { this.reader, reader });
+                this.reader = new CompositeMetricReader([this.reader, reader]);
             }
 
             if (reader is PeriodicExportingMetricReader periodicExportingMetricReader)
@@ -122,7 +122,7 @@ internal sealed class MeterProviderSdk : MeterProvider
 
         this.compositeMetricReader = this.reader as CompositeMetricReader;
 
-        if (state.Instrumentation.Any())
+        if (state.Instrumentation.Count > 0)
         {
             foreach (var instrumentation in state.Instrumentation)
             {
@@ -143,12 +143,12 @@ internal sealed class MeterProviderSdk : MeterProvider
         }
 
         // Setup Listener
-        if (state.MeterSources.Any(s => WildcardHelper.ContainsWildcard(s)))
+        if (state.MeterSources.Exists(WildcardHelper.ContainsWildcard))
         {
             var regex = WildcardHelper.GetWildcardRegex(state.MeterSources);
             this.shouldListenTo = instrument => regex.IsMatch(instrument.Meter.Name);
         }
-        else if (state.MeterSources.Any())
+        else if (state.MeterSources.Count > 0)
         {
             var meterSourcesToSubscribe = new HashSet<string>(state.MeterSources, StringComparer.OrdinalIgnoreCase);
             this.shouldListenTo = instrument => meterSourcesToSubscribe.Contains(instrument.Meter.Name);
@@ -451,24 +451,25 @@ internal sealed class MeterProviderSdk : MeterProvider
         {
             if (disposing)
             {
-                if (this.instrumentations != null)
+                foreach (var item in this.instrumentations)
                 {
-                    foreach (var item in this.instrumentations)
-                    {
-                        (item as IDisposable)?.Dispose();
-                    }
-
-                    this.instrumentations.Clear();
+                    (item as IDisposable)?.Dispose();
                 }
+
+                this.instrumentations.Clear();
 
                 // Wait for up to 5 seconds grace period
                 this.reader?.Shutdown(5000);
                 this.reader?.Dispose();
+                this.reader = null;
+
                 this.compositeMetricReader?.Dispose();
+                this.compositeMetricReader = null;
 
                 this.listener?.Dispose();
 
                 this.OwnedServiceProvider?.Dispose();
+                this.OwnedServiceProvider = null;
             }
 
             this.Disposed = true;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics.Metrics;
+using System.Globalization;
 
 namespace OpenTelemetry.Metrics;
 
@@ -14,7 +15,7 @@ internal readonly struct MetricStreamIdentity : IEquatable<MetricStreamIdentity>
     {
         this.MeterName = instrument.Meter.Name;
         this.MeterVersion = instrument.Meter.Version ?? string.Empty;
-        this.MeterTags = instrument.Meter.Tags;
+        this.MeterTags = instrument.Meter.Tags != null ? new Tags(instrument.Meter.Tags.ToArray()) : null;
         this.InstrumentName = metricStreamConfiguration?.Name ?? instrument.Name;
         this.Unit = instrument.Unit ?? string.Empty;
         this.Description = metricStreamConfiguration?.Description ?? instrument.Description ?? string.Empty;
@@ -32,6 +33,7 @@ internal readonly struct MetricStreamIdentity : IEquatable<MetricStreamIdentity>
         hashCode.Add(this.InstrumentType);
         hashCode.Add(this.MeterName);
         hashCode.Add(this.MeterVersion);
+        hashCode.Add(this.MeterTags);
         hashCode.Add(this.InstrumentName);
         hashCode.Add(this.HistogramRecordMinMax);
         hashCode.Add(this.Unit);
@@ -63,8 +65,7 @@ internal readonly struct MetricStreamIdentity : IEquatable<MetricStreamIdentity>
             hash = (hash * 31) + this.InstrumentType.GetHashCode();
             hash = (hash * 31) + this.MeterName.GetHashCode();
             hash = (hash * 31) + this.MeterVersion.GetHashCode();
-
-            // MeterTags is not part of identity, so not included here.
+            hash = (hash * 31) + this.MeterTags?.GetHashCode() ?? 0;
             hash = (hash * 31) + this.InstrumentName.GetHashCode();
             hash = (hash * 31) + this.HistogramRecordMinMax.GetHashCode();
             hash = (hash * 31) + this.ExponentialHistogramMaxSize.GetHashCode();
@@ -91,7 +92,7 @@ internal readonly struct MetricStreamIdentity : IEquatable<MetricStreamIdentity>
 
     public string MeterVersion { get; }
 
-    public IEnumerable<KeyValuePair<string, object?>>? MeterTags { get; }
+    public Tags? MeterTags { get; }
 
     public string InstrumentName { get; }
 
@@ -141,6 +142,7 @@ internal readonly struct MetricStreamIdentity : IEquatable<MetricStreamIdentity>
             && this.Unit == other.Unit
             && this.Description == other.Description
             && this.ViewId == other.ViewId
+            && this.MeterTags == other.MeterTags
             && this.HistogramRecordMinMax == other.HistogramRecordMinMax
             && this.ExponentialHistogramMaxSize == other.ExponentialHistogramMaxSize
             && this.ExponentialHistogramMaxScale == other.ExponentialHistogramMaxScale
@@ -189,7 +191,7 @@ internal readonly struct MetricStreamIdentity : IEquatable<MetricStreamIdentity>
 
             for (int i = 0; i < adviceExplicitBucketBoundaries.Count; i++)
             {
-                explicitBucketBoundaries[i] = Convert.ToDouble(adviceExplicitBucketBoundaries[i]);
+                explicitBucketBoundaries[i] = Convert.ToDouble(adviceExplicitBucketBoundaries[i], CultureInfo.InvariantCulture);
             }
 
             return explicitBucketBoundaries;
