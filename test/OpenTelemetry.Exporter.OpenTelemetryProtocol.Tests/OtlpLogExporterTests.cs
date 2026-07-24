@@ -1844,6 +1844,33 @@ public class OtlpLogExporterTests
     }
 
     [Fact]
+    public void WriteLogsData_When_Serialization_Throws_Does_Not_Leak_Previous_Batch()
+    {
+        var batchA = GenerateSingleLogRecordBatch("MyLogger", "log-a");
+        var sdkOptions = DefaultSdkLimitOptions;
+        var experimentalOptions = new ExperimentalOptions();
+        var resource = ResourceBuilder.CreateEmpty().Build();
+        var overflowBuffer = new byte[100 * 1024 * 1024];
+
+        Assert.Throws<IndexOutOfRangeException>(() =>
+            ProtobufOtlpLogSerializer.WriteLogsData(ref overflowBuffer, overflowBuffer.Length, sdkOptions, experimentalOptions, resource, batchA));
+
+        var batchB = GenerateSingleLogRecordBatch("MyLogger", "log-b");
+        var buffer = new byte[4096];
+        var writePosition = ProtobufOtlpLogSerializer.WriteLogsData(ref buffer, 0, sdkOptions, experimentalOptions, resource, batchB);
+
+        using var stream = new MemoryStream(buffer, 0, writePosition);
+        var logsData = OtlpLogs.LogsData.Parser.ParseFrom(stream);
+        var request = new OtlpCollector.ExportLogsServiceRequest();
+        request.ResourceLogs.Add(logsData.ResourceLogs);
+
+        var resourceLog = Assert.Single(request.ResourceLogs);
+        var scopeLog = Assert.Single(resourceLog.ScopeLogs);
+        var logRecord = Assert.Single(scopeLog.LogRecords);
+        Assert.Equal("log-b", logRecord.Body.StringValue);
+    }
+
+    [Fact]
     public void LogSerialization_ExpandsBufferForLogsAndSerializes()
     {
         LogRecordAttributeList attributes = default;
@@ -2045,6 +2072,23 @@ public class OtlpLogExporterTests
         {
             ProtobufSerializer.ReturnBuffer(buffer);
         }
+    }
+
+    private static Batch<LogRecord> GenerateSingleLogRecordBatch(string loggerName, string body)
+    {
+        var logRecords = new List<LogRecord>();
+
+        using (var loggerProvider = Sdk.CreateLoggerProviderBuilder()
+                   .AddInMemoryExporter(logRecords)
+                   .Build())
+        {
+            var logger = loggerProvider.GetLogger(loggerName);
+            logger.EmitLog(new LogRecordData { Body = body });
+        }
+
+        Assert.Single(logRecords);
+
+        return new Batch<LogRecord>([logRecords[0]], 1);
     }
 
     private static OtlpLogs.LogRecord? ToOtlpLogs(SdkLimitOptions sdkOptions, ExperimentalOptions experimentalOptions, LogRecord logRecord)

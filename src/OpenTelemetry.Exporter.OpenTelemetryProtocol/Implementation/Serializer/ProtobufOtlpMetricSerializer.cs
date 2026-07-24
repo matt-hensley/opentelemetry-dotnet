@@ -43,8 +43,14 @@ internal static class ProtobufOtlpMetricSerializer
             metrics.Add(metric);
         }
 
-        writePosition = TryWriteResourceMetrics(ref buffer, writePosition, resource, scopeMetricsList);
-        ReturnMetricListToPool();
+        try
+        {
+            writePosition = TryWriteResourceMetrics(ref buffer, writePosition, resource, scopeMetricsList);
+        }
+        finally
+        {
+            ReturnMetricListToPool();
+        }
 
         return writePosition;
     }

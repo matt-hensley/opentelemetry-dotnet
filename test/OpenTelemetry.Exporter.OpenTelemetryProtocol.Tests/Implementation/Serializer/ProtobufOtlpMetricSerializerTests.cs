@@ -10,6 +10,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Tests;
 using OtlpCollector = OpenTelemetry.Proto.Collector.Metrics.V1;
+using OtlpMetrics = OpenTelemetry.Proto.Metrics.V1;
 
 namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.Implementation.Serializer;
 
@@ -91,6 +92,51 @@ public static class ProtobufOtlpMetricSerializerTests
 
         // Act and Assert
         await WriteMetricsAndAssertSnapshot(metrics);
+    }
+
+    [Fact]
+    public static void WriteMetricsData_When_Serialization_Throws_Does_Not_Leak_Previous_Batch()
+    {
+        const string meterName = "otlp.protobuf.serialization.leak-test";
+
+        var resource = new Resource(new Dictionary<string, object> { ["service.name"] = "leak-test" });
+
+        var batchA = GenerateSingleCounterMetricBatch(meterName, "counter-a");
+        var overflowBuffer = new byte[100 * 1024 * 1024];
+
+        Assert.Throws<IndexOutOfRangeException>(() =>
+            ProtobufOtlpMetricSerializer.WriteMetricsData(ref overflowBuffer, overflowBuffer.Length, resource, batchA));
+
+        var batchB = GenerateSingleCounterMetricBatch(meterName, "counter-b");
+
+        var buffer = new byte[4096];
+        var writePosition = ProtobufOtlpMetricSerializer.WriteMetricsData(ref buffer, 0, resource, batchB);
+
+        using var stream = new MemoryStream(buffer, 0, writePosition);
+        var metricsData = OtlpMetrics.MetricsData.Parser.ParseFrom(stream);
+
+        var resourceMetric = Assert.Single(metricsData.ResourceMetrics);
+        var scopeMetric = Assert.Single(resourceMetric.ScopeMetrics);
+        var metric = Assert.Single(scopeMetric.Metrics);
+        Assert.Equal("counter-b", metric.Name);
+    }
+
+    private static Batch<Metric> GenerateSingleCounterMetricBatch(string meterName, string counterName)
+    {
+        var exportedMetrics = new List<Metric>();
+
+        using var meter = new Meter(meterName);
+        using var meterProvider = Sdk.CreateMeterProviderBuilder()
+            .AddMeter(meterName)
+            .AddInMemoryExporter(exportedMetrics)
+            .Build();
+
+        meter.CreateCounter<int>(counterName).Add(1);
+
+        Assert.True(meterProvider.ForceFlush());
+        Assert.NotEmpty(exportedMetrics);
+
+        return new Batch<Metric>([.. exportedMetrics], exportedMetrics.Count);
     }
 
     private static async Task WriteMetricsAndAssertSnapshot(Batch<Metric> metrics)

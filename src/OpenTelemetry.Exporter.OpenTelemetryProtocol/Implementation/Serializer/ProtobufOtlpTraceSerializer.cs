@@ -37,8 +37,14 @@ internal static class ProtobufOtlpTraceSerializer
             activities.Add(activity);
         }
 
-        writePosition = TryWriteResourceSpans(ref buffer, writePosition, sdkLimitOptions, resource);
-        ReturnActivityListToPool();
+        try
+        {
+            writePosition = TryWriteResourceSpans(ref buffer, writePosition, sdkLimitOptions, resource);
+        }
+        finally
+        {
+            ReturnActivityListToPool();
+        }
 
         return writePosition;
     }

@@ -48,8 +48,14 @@ internal static class ProtobufOtlpLogSerializer
             logRecords.Add(logRecord);
         }
 
-        writePosition = TryWriteResourceLogs(ref buffer, writePosition, sdkLimitOptions, experimentalOptions, resource, scopeLogsList);
-        ReturnLogRecordListToPool();
+        try
+        {
+            writePosition = TryWriteResourceLogs(ref buffer, writePosition, sdkLimitOptions, experimentalOptions, resource, scopeLogsList);
+        }
+        finally
+        {
+            ReturnLogRecordListToPool();
+        }
 
         return writePosition;
     }

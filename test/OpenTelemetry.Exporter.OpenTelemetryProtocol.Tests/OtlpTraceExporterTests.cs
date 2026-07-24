@@ -737,6 +737,39 @@ public sealed class OtlpTraceExporterTests : IDisposable
     }
 
     [Fact]
+    public void WriteTraceData_When_Serialization_Throws_Does_Not_Leak_Previous_Batch()
+    {
+        using var activitySource = new ActivitySource(nameof(this.WriteTraceData_When_Serialization_Throws_Does_Not_Leak_Previous_Batch));
+        using var activityA = activitySource.StartActivity("activity-a");
+        using var activityB = activitySource.StartActivity("activity-b");
+
+        Assert.NotNull(activityA);
+        Assert.NotNull(activityB);
+
+        var batchA = new Batch<Activity>([activityA], 1);
+        var batchB = new Batch<Activity>([activityB], 1);
+        var sdkOptions = new SdkLimitOptions();
+        var resource = ResourceBuilder.CreateEmpty().Build();
+        var overflowBuffer = new byte[100 * 1024 * 1024];
+
+        Assert.Throws<IndexOutOfRangeException>(() =>
+            ProtobufOtlpTraceSerializer.WriteTraceData(ref overflowBuffer, overflowBuffer.Length, sdkOptions, resource, batchA));
+
+        var buffer = new byte[4096];
+        var writePosition = ProtobufOtlpTraceSerializer.WriteTraceData(ref buffer, 0, sdkOptions, resource, batchB);
+
+        using var stream = new MemoryStream(buffer, 0, writePosition);
+        var tracesData = OtlpTrace.TracesData.Parser.ParseFrom(stream);
+        var request = new OtlpCollector.ExportTraceServiceRequest();
+        request.ResourceSpans.Add(tracesData.ResourceSpans);
+
+        var resourceSpan = Assert.Single(request.ResourceSpans);
+        var scopeSpan = Assert.Single(resourceSpan.ScopeSpans);
+        var span = Assert.Single(scopeSpan.Spans);
+        Assert.Equal("activity-b", span.Name);
+    }
+
+    [Fact]
     public void TracesSerialization_ExpandsBufferForTracesAndSerializes()
     {
         var tags = new ActivityTagsCollection
