@@ -66,17 +66,24 @@ internal sealed class PrometheusExporterMiddleware
                 return;
             }
 
-            using var requestCancelled = new CancellationTokenSource();
-
             Stopwatch? scrapeStopwatch = null;
+            TryGetScrapeTimeout(httpContext.Request.Headers, out var scrapeTimeout);
 
-            if (TryGetScrapeTimeout(httpContext.Request.Headers, out var scrapeTimeout))
+            // Avoid allocating cancellation token sources for the common case where no scrape
+            // timeout is configured. RequestAborted already provides cancellation for the request.
+            using var requestCancelled = scrapeTimeout is null ? null : new CancellationTokenSource();
+
+            if (requestCancelled is not null)
             {
                 requestCancelled.CancelAfter(scrapeTimeout.GetValueOrDefault());
                 scrapeStopwatch = Stopwatch.StartNew();
             }
 
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(requestCancelled.Token, httpContext.RequestAborted);
+            using var linkedCts = requestCancelled is not null
+                ? CancellationTokenSource.CreateLinkedTokenSource(requestCancelled.Token, httpContext.RequestAborted)
+                : null;
+
+            var cancellationToken = linkedCts?.Token ?? httpContext.RequestAborted;
 
             var requestHeaders = httpContext.Request.GetTypedHeaders();
 
@@ -88,7 +95,8 @@ internal sealed class PrometheusExporterMiddleware
 
             try
             {
-                if (!requestCancelled.IsCancellationRequested &&
+                if (requestCancelled is not null &&
+                    !requestCancelled.IsCancellationRequested &&
                     scrapeTimeout is { } configuredTimeout &&
                     scrapeStopwatch!.Elapsed >= configuredTimeout)
                 {
@@ -102,7 +110,7 @@ internal sealed class PrometheusExporterMiddleware
 #endif
                 }
 
-                linkedCts.Token.ThrowIfCancellationRequested();
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (!collectionResponse.Succeeded)
                 {
@@ -120,7 +128,7 @@ internal sealed class PrometheusExporterMiddleware
                         response.Headers.Append("Last-Modified", collectionResponse.GeneratedAtUtc.ToString("R"));
                         response.ContentType = PrometheusProtocol.GetContentType(protocol);
 
-                        await WriteResponseAsync(response, dataView.Array.AsMemory(0, dataView.Count), AcceptsGZip(requestHeaders), linkedCts.Token);
+                        await WriteResponseAsync(response, dataView.Array.AsMemory(0, dataView.Count), AcceptsGZip(requestHeaders), cancellationToken);
                     }
                     else
                     {
@@ -129,7 +137,8 @@ internal sealed class PrometheusExporterMiddleware
                     }
                 }
             }
-            catch (OperationCanceledException ex) when (ex.CancellationToken == linkedCts.Token)
+            catch (OperationCanceledException ex) when (
+                cancellationToken.CanBeCanceled && ex.CancellationToken == cancellationToken)
             {
                 if (scrapeTimeout is { } timeout)
                 {

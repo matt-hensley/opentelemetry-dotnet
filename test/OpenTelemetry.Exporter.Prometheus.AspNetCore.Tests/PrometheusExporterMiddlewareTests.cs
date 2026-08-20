@@ -809,6 +809,20 @@ public sealed class PrometheusExporterMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_WhenOperationCanceledExceptionHasNoCancellationToken_Returns500()
+    {
+        using var exporter = new PrometheusExporter(new PrometheusExporterOptions());
+        exporter.Collect = _ => throw new OperationCanceledException();
+        var middleware = new PrometheusExporterMiddleware(exporter);
+
+        var context = new DefaultHttpContext();
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+    }
+
+    [Fact]
     public async Task InvokeAsync_WhenExceptionOccursAfterResponseStarted_DoesNotReturn500()
     {
         using var exporter = new PrometheusExporter(new PrometheusExporterOptions());
