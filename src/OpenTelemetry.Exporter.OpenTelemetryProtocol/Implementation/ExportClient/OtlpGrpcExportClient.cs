@@ -228,7 +228,7 @@ internal sealed class OtlpGrpcExportClient : OtlpExportClient
         //   bytes 1-4  - Compressed payload length in big-endian format.
         //   bytes 5+   - Gzip-compressed protobuf payload.
 #if NET
-        var compressedStream = new PooledBufferStream();
+        var compressedStream = new PooledBufferStream(contentLength);
 #else
         var compressedStream = new MemoryStream();
 #endif

@@ -175,6 +175,19 @@ public class PooledBufferStreamTests
         Assert.All(returned, (p) => Assert.Equal(0, p));
     }
 
+    [Fact]
+    public void InitialCapacity_AvoidsGrowthForContainedWrites()
+    {
+        var pool = new TrackingArrayPool();
+
+        using var stream = new PooledBufferStream(initialCapacity: 5, pool);
+
+        stream.Write([1, 2, 3, 4, 5]);
+
+        Assert.Single(pool.Rented);
+        Assert.Empty(pool.Returned);
+    }
+
     private sealed class TrackingArrayPool : ArrayPool<byte>
     {
         public List<byte[]> Rented { get; } = [];
