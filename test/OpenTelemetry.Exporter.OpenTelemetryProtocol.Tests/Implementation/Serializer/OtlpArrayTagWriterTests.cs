@@ -331,13 +331,76 @@ public sealed class OtlpArrayTagWriterTests : IDisposable
         Assert.True(result);
         Assert.True(reentrantValue.NestedWriteSucceeded);
         Assert.Equal(2, pool.MaximumOutstandingRentals);
-        Assert.Equal(0, pool.OutstandingRentals);
+        Assert.Equal(1, pool.OutstandingRentals);
 
         using var stream = new MemoryStream(state.Buffer, 0, state.WritePosition);
         var keyValue = OtlpCommon.KeyValue.Parser.ParseFrom(stream);
         Assert.Equal(
             ["before", "reentrant", "after"],
             keyValue.Value.ArrayValue.Values.Select(value => value.StringValue));
+    }
+
+    [Fact]
+    public void SequentialArrayWrites_ReuseScratchBuffer()
+    {
+        var pool = new TrackingArrayPool();
+        var tagWriter = new ProtobufOtlpTagWriter(new(pool));
+        var state = new ProtobufOtlpTagWriter.OtlpTagWriterState
+        {
+            Buffer = new byte[4096],
+        };
+        string[] first = ["one"];
+        string[] second = ["two"];
+
+        Assert.True(tagWriter.TryWriteTag(ref state, "first", first));
+        Assert.True(tagWriter.TryWriteTag(ref state, "second", second));
+
+        Assert.Equal(1, pool.RentCount);
+        Assert.Equal(1, pool.OutstandingRentals);
+    }
+
+    [Fact]
+    public void SequentialArrayWrites_KeepBuffersInOwningPool()
+    {
+        var firstPool = new TrackingArrayPool();
+        var secondPool = new TrackingArrayPool();
+        var firstTagWriter = new ProtobufOtlpTagWriter(new(firstPool));
+        var secondTagWriter = new ProtobufOtlpTagWriter(new(secondPool));
+        var firstState = new ProtobufOtlpTagWriter.OtlpTagWriterState
+        {
+            Buffer = new byte[4096],
+        };
+        var secondState = new ProtobufOtlpTagWriter.OtlpTagWriterState
+        {
+            Buffer = new byte[4096],
+        };
+        string[] firstValues = ["one"];
+        string[] secondValues = ["two"];
+
+        Assert.True(firstTagWriter.TryWriteTag(ref firstState, "first", firstValues));
+        Assert.True(secondTagWriter.TryWriteTag(ref secondState, "second", secondValues));
+
+        Assert.Equal(1, firstPool.RentCount);
+        Assert.Equal(1, secondPool.RentCount);
+        Assert.Equal(1, firstPool.OutstandingRentals);
+        Assert.Equal(1, secondPool.OutstandingRentals);
+    }
+
+    [Fact]
+    public void ResizedArrayBuffer_IsReturnedAfterSuccessfulWrite()
+    {
+        var pool = new TrackingArrayPool();
+        var tagWriter = new ProtobufOtlpTagWriter(new(pool));
+        var state = new ProtobufOtlpTagWriter.OtlpTagWriterState
+        {
+            Buffer = new byte[8192],
+        };
+        var values = Enumerable.Repeat("value", 400).ToArray();
+
+        Assert.True(tagWriter.TryWriteTag(ref state, "values", values));
+
+        Assert.True(pool.RentCount > 1);
+        Assert.Equal(0, pool.OutstandingRentals);
     }
 
     [Fact]
@@ -443,12 +506,15 @@ public sealed class OtlpArrayTagWriterTests : IDisposable
     {
         private readonly ArrayPool<byte> innerPool = Shared;
 
+        public int RentCount { get; private set; }
+
         public int MaximumOutstandingRentals { get; private set; }
 
         public int OutstandingRentals { get; private set; }
 
         public override byte[] Rent(int minimumLength)
         {
+            this.RentCount++;
             this.OutstandingRentals++;
             this.MaximumOutstandingRentals = Math.Max(this.MaximumOutstandingRentals, this.OutstandingRentals);
             return this.innerPool.Rent(minimumLength);

@@ -130,9 +130,9 @@ internal sealed class ProtobufOtlpTagWriter : TagWriter<ProtobufOtlpTagWriter.Ot
         Buffer.BlockCopy(value.Buffer, 0, state.Buffer, state.WritePosition, value.WritePosition);
         state.WritePosition += value.WritePosition;
 
-        // The scratch buffer contents have now been copied into the main buffer,
-        // so return it to the pool. A fresh buffer is rented on the next array.
-        this.arrayTagWriter.ReleaseBuffer(ref value);
+        // The scratch buffer contents have now been copied into the main buffer.
+        // Retain it for reuse by the next sequential array write.
+        this.arrayTagWriter.CompleteWriteArray(ref value);
     }
 
     protected override void OnUnsupportedTagDropped(
@@ -225,12 +225,14 @@ internal sealed class ProtobufOtlpTagWriter : TagWriter<ProtobufOtlpTagWriter.Ot
         public int WritePosition;
     }
 
+#pragma warning disable CA1001 // ThreadLocal storage is intentionally tied to the writer lifetime.
     internal sealed class OtlpArrayTagWriter : ArrayTagWriter<OtlpTagWriterArrayState>
     {
         private const int DefaultBufferSize = 2048;
         private const int MaxBufferSize = 2 * 1024 * 1024;
 
         private readonly ArrayPool<byte> pool;
+        private readonly ThreadLocal<byte[]?> reusableBuffer = new();
 
         public OtlpArrayTagWriter()
             : this(ArrayPool<byte>.Shared)
@@ -244,11 +246,16 @@ internal sealed class ProtobufOtlpTagWriter : TagWriter<ProtobufOtlpTagWriter.Ot
         }
 
         public override OtlpTagWriterArrayState BeginWriteArray()
-            => new()
+        {
+            var buffer = this.reusableBuffer.Value;
+            this.reusableBuffer.Value = null;
+
+            return new()
             {
-                Buffer = this.pool.Rent(DefaultBufferSize),
+                Buffer = buffer ?? this.pool.Rent(DefaultBufferSize),
                 WritePosition = 0,
             };
+        }
 
         public override void WriteNullValue(ref OtlpTagWriterArrayState state)
             => state.WritePosition = ProtobufSerializer.WriteTagAndLength(state.Buffer, state.WritePosition, 0, ProtobufOtlpCommonFieldNumberConstants.ArrayValue_Value, ProtobufWireType.LEN);
@@ -340,5 +347,34 @@ internal sealed class ProtobufOtlpTagWriter : TagWriter<ProtobufOtlpTagWriter.Ot
                 ProtobufSerializer.ReturnBuffer(this.pool, buffer);
             }
         }
+
+        internal void CompleteWriteArray(ref OtlpTagWriterArrayState state)
+        {
+            var buffer = state.Buffer;
+            state = default;
+
+            if (buffer == null)
+            {
+                return;
+            }
+
+            // Do not retain buffers grown for unusually large arrays. They are returned to
+            // the pool after this write instead.
+            if (buffer.Length > DefaultBufferSize)
+            {
+                ProtobufSerializer.ReturnBuffer(this.pool, buffer);
+                return;
+            }
+
+            if (this.reusableBuffer.Value == null)
+            {
+                this.reusableBuffer.Value = buffer;
+                return;
+            }
+
+            // A nested write has already populated this thread's reusable slot.
+            ProtobufSerializer.ReturnBuffer(this.pool, buffer);
+        }
     }
+#pragma warning restore CA1001
 }
