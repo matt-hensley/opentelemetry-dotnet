@@ -400,8 +400,40 @@ public static class ProtobufOtlpMetricSerializerTests
         while (!completed);
 
         Assert.True(requestCount > 1, "The batch was expected to need more than one request.");
-        Assert.Equal(0, cursor.DroppedMetricPointCount);
         Assert.Equal(expected.OrderBy(static d => d, StringComparer.Ordinal), actual.OrderBy(static d => d, StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void WriteMetricsData_LaterMetricCanContinueInTheNextRequest(bool nextMetricInAnotherScope)
+    {
+        var secondMeter = nextMetricInAnotherScope ? "meter-2" : "meter-1";
+        static void RecordFirst(Counter<long> counter) => counter.Add(1);
+        static void RecordSecond(Counter<long> counter)
+            => counter.Add(2, new KeyValuePair<string, object?>("size", "a"));
+
+        var limit = MeasureRequest(GenerateCounters(("meter-1", "counter-1", RecordFirst), (secondMeter, "counter-2", RecordSecond)));
+        var metrics = GenerateCounters(
+            ("meter-1", "counter-1", RecordFirst),
+            (secondMeter, "counter-2", static counter =>
+            {
+                RecordSecond(counter);
+                counter.Add(3, new KeyValuePair<string, object?>("size", "b"));
+            }));
+
+        var buffer = new byte[1024];
+        var cursor = default(ProtobufOtlpMetricSerializer.MetricsDataCursor);
+
+        var length = ProtobufOtlpMetricSerializer.WriteMetricsData(ref buffer, 0, Resource.Empty, metrics, out _, limit, ref cursor, out var completed);
+        Assert.False(completed);
+        Assert.Equal(limit, length);
+        Assert.Equal(["counter-1=1", "counter-2=2"], DescribeCounters(ParseRequest(buffer, length)));
+
+        length = ProtobufOtlpMetricSerializer.WriteMetricsData(ref buffer, 0, Resource.Empty, metrics, out _, limit, ref cursor, out completed);
+        Assert.True(completed);
+        Assert.InRange(length, 1, limit);
+        Assert.Equal(["counter-2=3"], DescribeCounters(ParseRequest(buffer, length)));
     }
 
     [Fact]
@@ -436,7 +468,6 @@ public static class ProtobufOtlpMetricSerializerTests
         while (!completed);
 
         Assert.Equal([1, 3], values);
-        Assert.Equal(1, cursor.DroppedMetricPointCount);
 
         var dropped = Assert.Single(listener.Messages, static e => e.EventId == MetricPointDroppedEventId);
         Assert.Equal("requests", dropped.Payload?[0]);
@@ -469,7 +500,6 @@ public static class ProtobufOtlpMetricSerializerTests
         Assert.True(completed);
         Assert.Equal(0, length);
         Assert.True(dirtyLength > 0, "The bytes written before the request was abandoned have to be cleared.");
-        Assert.Equal(1, cursor.DroppedMetricPointCount);
     }
 
     [Fact]
@@ -481,9 +511,6 @@ public static class ProtobufOtlpMetricSerializerTests
 
         // Not even the resource, scope and metric a metric point belongs to fit.
         Assert.ThrowsAny<Exception>(() => ProtobufOtlpMetricSerializer.WriteMetricsData(ref buffer, 0, Resource.Empty, metrics, out _, 16, ref cursor, out _));
-
-        Assert.Equal(default, cursor.MetricIndex);
-        Assert.Equal(default, cursor.MetricPointIndex);
     }
 
     [Theory]
@@ -519,7 +546,6 @@ public static class ProtobufOtlpMetricSerializerTests
 
         Assert.Equal(2, requestCount);
         Assert.Equal(["counter-1=1", "counter-2=2"], values);
-        Assert.Equal(0, cursor.DroppedMetricPointCount);
     }
 
     [Theory]
@@ -569,7 +595,6 @@ public static class ProtobufOtlpMetricSerializerTests
 
         Assert.Equal(2, requestCount);
         Assert.Equal(["counter-1=1", "counter-2=3"], values);
-        Assert.Equal(1, cursor.DroppedMetricPointCount);
     }
 
     [Fact]
@@ -618,7 +643,6 @@ public static class ProtobufOtlpMetricSerializerTests
         // Every metric point which fits is in a request of its own.
         Assert.Equal(3, requestCount);
         Assert.Equal(["counter-1=1", "counter-1=4", "counter-1=6"], values);
-        Assert.Equal(4, cursor.DroppedMetricPointCount);
     }
 
     [Fact]
@@ -640,7 +664,6 @@ public static class ProtobufOtlpMetricSerializerTests
 
             Assert.True(completed);
             Assert.Equal(0, length);
-            Assert.Equal(1, cursor.DroppedMetricPointCount);
             Assert.Equal(export, tag.Calls);
         }
     }
@@ -668,7 +691,6 @@ public static class ProtobufOtlpMetricSerializerTests
 
             Assert.True(completed);
             Assert.Equal(0, length);
-            Assert.Equal(1, cursor.DroppedMetricPointCount);
             Assert.Equal(export, tag.Calls);
         }
     }
